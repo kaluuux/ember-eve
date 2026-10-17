@@ -69,9 +69,11 @@ export interface CartLine {
   unit: number;
   tint: string;
   qty: number;
+  /** Personal note for a gift box */
+  note?: string;
 }
 
-export interface OrderItem { name: string; sub: string; qty: number; unit: number; tint: string; pid: number }
+export interface OrderItem { name: string; sub: string; qty: number; unit: number; tint: string; pid: number; note?: string }
 export type OrderStatus = 'Processing' | 'Dispatched' | 'Delivered' | 'Cancelled';
 
 export interface Order {
@@ -93,6 +95,8 @@ export interface Order {
   status: OrderStatus;
   pay: string;
   note: string;
+  /** Note from the buyer to the seller */
+  sellerNote?: string;
   userId: number | null;
   log: { s: string; d: string }[];
 }

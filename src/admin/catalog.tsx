@@ -160,7 +160,7 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
           </label>
         </div>
 
-        <div style={LBL}>Options customers choose from (size, fragrance, theme, jar type…). Each choice can add to the price.</div>
+        <div style={LBL}>Options customers choose from (size, fragrance, theme, jar type…). Each choice can add to the price, or take off with a minus (the first choice is the default shown to customers).</div>
         {d.groups.map((g, gi) => (
           <div key={g.id} className="card stack" style={{ padding: 12, gap: 8, background: 'var(--bg)' }}>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -170,7 +170,7 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
             {g.options.map((o, oi) => (
               <div key={o.id} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 <input className="input" style={{ flex: '2 1 160px' }} aria-label="Choice label" placeholder="Choice, e.g. Large (300g)" value={o.label} onChange={(e) => setOpt(gi, oi, { label: e.target.value })} />
-                <input className="input" style={{ flex: '1 1 90px' }} type="number" min={0} aria-label="Extra price" placeholder="+ Rs" value={o.add || ''} onChange={(e) => setOpt(gi, oi, { add: Math.max(0, Number(e.target.value) || 0) })} />
+                <input className="input" style={{ flex: '1 1 90px' }} type="number" aria-label="Price change" placeholder="+/- Rs" value={o.add || ''} onChange={(e) => setOpt(gi, oi, { add: Math.round(Number(e.target.value) || 0) })} />
                 <ColorLimit palette={palette} value={o.colors} onChange={(colors) => setOpt(gi, oi, { colors })} />
                 <button type="button" className="btn-xs danger" aria-label="Remove choice" onClick={() => setGroup(gi, { options: g.options.filter((_, i) => i !== oi) })}>×</button>
               </div>
@@ -190,7 +190,7 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
           <span style={LBL}>Pin to shelf</span>
           {PINS.map(([k, l]) => <Chip key={k} size="lg" on={d.pins.includes(k)} onClick={() => up({ pins: d.pins.includes(k) ? d.pins.filter((x) => x !== k) : d.pins.concat(k) })}>{l}</Chip>)}
         </div>
-        <div className="muted" style={{ fontSize: 13 }}>Best Selling, Trending and New fill themselves from orders and launch dates. Pin only to force a candle onto a shelf. From price shown to customers: {money(Math.round((d.base + d.groups.reduce((a, g) => a + Math.min(...g.options.map((o) => o.add), 0), 0)) * (1 - d.salePct / 100)))}.</div>
+        <div className="muted" style={{ fontSize: 13 }}>Best Selling, Trending and New fill themselves from orders and launch dates. Pin only to force a candle onto a shelf. Default price shown to customers: {money(Math.round((d.base + d.groups.reduce((a, g) => a + (g.options[0]?.add ?? 0), 0)) * (1 - d.salePct / 100)))}.</div>
         <ErrorText>{err}</ErrorText>
         <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
           <button type="button" className="btn ghost" onClick={onClose}>Cancel</button>

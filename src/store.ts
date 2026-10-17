@@ -109,7 +109,8 @@ export const EMPTY: never[] = [];
 
 const FRAG: Group = {
   id: 'frag', label: 'Fragrance',
-  options: [{ id: 'none', label: 'Unscented', add: 0 }, ...['Vanilla', 'Lavender', 'Jasmine', 'Rosemary', 'Strawberry'].map((n) => ({ id: n.toLowerCase(), label: n, add: 50 }))],
+  // Scented is the default and the listed price; unscented takes Rs 50 off.
+  options: [...['Vanilla', 'Lavender', 'Jasmine', 'Rosemary', 'Strawberry'].map((n) => ({ id: n.toLowerCase(), label: n, add: 0 })), { id: 'none', label: 'Unscented', add: -50 }],
 };
 const GLASS_SIZE: Group = { id: 'size', label: 'Size', options: [{ id: 's', label: 'Small (150g)', add: 0 }, { id: 'l', label: 'Large (300g)', add: 600 }] };
 
@@ -124,6 +125,8 @@ export function starterCatalog() {
   });
   const products: Product[] = [];
   let id = 1;
+  /** Base prices already include the scent; unscented is Rs 50 less. */
+  const SC = 50;
   const molds = ['Rose', 'Lotus', 'Heart', 'Butterfly', 'Bubble', 'Flower', 'Pillar', 'Seashell', 'Star', 'Cloud', 'Teddy Bear', 'Tulip'];
   molds.forEach((n, i) => products.push(mk(id++, n + ' Candle', 'mold', 450 + (i % 4) * 100, 'A hand-poured ' + n.toLowerCase() + ', made in the colour you choose.', {
     groups: [FRAG], stock: n === 'Rose' ? 3 : n === 'Cloud' ? 0 : null, salePct: n === 'Tulip' ? 15 : 0, created: ago(i === 3 ? 6 : i === 9 ? 12 : 90), featured: i < 4,
@@ -152,6 +155,7 @@ export function starterCatalog() {
   seasonal.forEach(([season, n, cat, base, blurb]) => products.push(mk(id++, n, cat, base, blurb, {
     season, groups: cat === 'glass' ? [GLASS_SIZE, FRAG] : [FRAG], created: ago(season === 'halloween' ? 5 : 40),
   })));
+  products.forEach((p) => { if (p.groups.some((g) => g.id === 'frag')) p.base += SC; });
   return {
     products,
     colors: DEFAULT_COLORS,
@@ -167,7 +171,7 @@ export function starterCatalog() {
 }
 
 function seed() {
-  if (remote || get('seeded_v3', false)) return;
+  if (remote || get('seeded_v4', false)) return;
   const day = 86400000, now = Date.now();
   const ago = (d: number) => new Date(now - d * day).toISOString();
   const { products } = starterCatalog();

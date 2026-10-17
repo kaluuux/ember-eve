@@ -16,6 +16,8 @@ export function Gifts() {
     const p = active.find((x) => x.id === pid) ?? first;
     return { pid: p?.id ?? 0, sel: p ? defaultSelection(p, colors) : { opts: {}, color: '', blend: [], qty: 1 } };
   };
+  const [wantNote, setWantNote] = useState(false);
+  const [note, setNote] = useState('');
   const [slots, setSlots] = useState<Slot[]>(() => [mkSlot(first?.id ?? 0), mkSlot(first?.id ?? 0), mkSlot(first?.id ?? 0)]);
   const productOf = (pid: number) => active.find((x) => x.id === pid);
   const upd = (i: number, o: Partial<Slot>) => setSlots((t) => t.map((s, j) => (j === i ? { ...s, ...o } : s)));
@@ -24,7 +26,7 @@ export function Gifts() {
   if (!first) {
     return (
       <section id="gifts" className="page-72">
-        <h2 className="h2">Build Your Own Gift Box</h2>
+        <h2 className="h2">Create Your Own Gift Box</h2>
         <p className="muted">No candles are available right now. Please check back soon.</p>
       </section>
     );
@@ -46,13 +48,14 @@ export function Gifts() {
       key, pid: 0, name: 'Gift Box (' + rows.length + ' candles)',
       sub: rows.map((r) => r.p!.name + ' [' + describe(r.p!, r.sel, colors) + ']').join('; '),
       unit: total, tint: selectionTint(rows[0].sel, colors), qty: 1,
+      ...(wantNote && note.trim() ? { note: note.trim() } : {}),
     });
     flash('Gift box added');
   };
 
   return (
     <section id="gifts" className="page-72">
-      <h2 className="h2">Build Your Own Gift Box</h2>
+      <h2 className="h2">Create Your Own Gift Box</h2>
       <p style={{ margin: '4px 0 24px', fontSize: 16, color: 'var(--muted)' }}>
         Choose any candles, pick each colour, and we pack them in a custom gift box (+{money(settings.giftBoxFee)}). You pay for the candles plus the box.
       </p>
@@ -84,7 +87,19 @@ export function Gifts() {
           </div>
         ))}
       </div>
-      <div className="card" style={{ marginTop: 24, padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+      <div className="card stack" style={{ marginTop: 24, padding: 16, gap: 12 }}>
+        <label style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
+          <input type="checkbox" checked={wantNote} onChange={(e) => setWantNote(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#8F6642' }} />
+          Add a personal note to the gift box
+        </label>
+        {wantNote && (
+          <div className="stack" style={{ gap: 4 }}>
+            <textarea className="input" rows={3} maxLength={250} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Write the message you would like inside the box" aria-label="Gift box note" />
+            <div className="muted" style={{ fontSize: 12, textAlign: 'right' }}>{note.length}/250</div>
+          </div>
+        )}
+      </div>
+      <div className="card" style={{ marginTop: 16, padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <div className="muted" style={{ color: 'var(--muted2)' }}>Candles {money(candles)} + gift box {money(settings.giftBoxFee)}</div>
           <div style={{ fontSize: 22, fontWeight: 700 }}>{money(total)}</div>

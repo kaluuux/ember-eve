@@ -4,7 +4,7 @@ import { Chip, ErrorText, Field, useForm } from '../components/ui';
 import { go } from '../router';
 import { remote } from '../remote';
 import type { Discount, Message, Order, OrderStatus, Product, Review, Settings, User } from '../types';
-import { orderView } from '../commerce';
+import { lineText, orderView } from '../commerce';
 
 type Flash = (m: string) => void;
 
@@ -157,11 +157,12 @@ export function OrdersView({ sel, flash }: { sel: string; flash: Flash }) {
             <div><b>{ord.name}</b><br />{ord.email}<br />{ord.phone}</div>
             <div><b>Deliver to</b><br />{ord.addr}</div>
             <div><b>Delivery</b> {ord.shipName} · <b>Payment</b> {ord.pay}</div>
-            {ord.note && <div style={{ background: 'var(--cream)', borderRadius: 8, padding: '8px 12px' }}><b>Gift note</b><br />{ord.note}</div>}
+            {ord.sellerNote && <div style={{ background: '#FEF3C7', borderRadius: 8, padding: '8px 12px' }}><b>Note from customer</b><br />{ord.sellerNote}</div>}
+            {ord.note && <div style={{ background: 'var(--cream)', borderRadius: 8, padding: '8px 12px' }}><b>Gift message</b><br />{ord.note}</div>}
             <div style={{ borderTop: '1px solid var(--line)', paddingTop: 8 }}>
               {ord.items.map((l, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '4px 0' }}>
-                  <span>{l.qty} × {l.name}<br /><span style={{ fontSize: 12, color: 'var(--muted2)' }}>{l.sub}</span></span>
+                  <span>{l.qty} × {l.name}<br /><span style={{ fontSize: 12, color: 'var(--muted2)' }}>{lineText(l)}</span></span>
                   <span>{money(l.unit * l.qty)}</span>
                 </div>
               ))}

@@ -90,9 +90,12 @@ export function selectionTint(sel: Selection, palette: Color[]): string {
   return palette.find((c) => c.id === id)?.hex ?? '#EADFD3';
 }
 
-export const lowestPrice = (p: Product) =>
-  afterSale(p, p.base + p.groups.reduce((a, g) => a + Math.min(...g.options.map((o) => o.add), 0), 0));
-export const fromListPrice = (p: Product) => p.base + p.groups.reduce((a, g) => a + Math.min(...g.options.map((o) => o.add), 0), 0);
+/** Price of the default selection (the first choice in every group, e.g. smallest size, scented). Cards show it as "From". */
+export const fromListPrice = (p: Product) => p.base + p.groups.reduce((a, g) => a + (g.options[0]?.add ?? 0), 0);
+export const lowestPrice = (p: Product) => afterSale(p, fromListPrice(p));
+
+/** Line description for baskets, orders and the admin: choices plus any gift note. */
+export const lineText = (l: { sub: string; note?: string }) => l.sub + (l.note ? ' · Gift note: "' + l.note + '"' : '');
 export const inStock = (p: Product) => p.stock === null || p.stock > 0;
 
 /* ------------------------------------------------------------------- seasons */

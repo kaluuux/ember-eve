@@ -3,7 +3,7 @@ import { useApp } from '../AppContext';
 import { DiscountBox } from '../components/DiscountBox';
 import { Summary } from './Cart';
 import { Chip, ErrorText, Field, useForm } from '../components/ui';
-import { computeTotals } from '../commerce';
+import { computeTotals, lineText } from '../commerce';
 import { get, isEmail, money, set, setLocal } from '../store';
 import { remote } from '../remote';
 import { placeOrder } from '../sync';
@@ -55,9 +55,9 @@ export function Checkout() {
     const order: Order = {
       id, date: iso, email: str('email'), name: str('first') + ' ' + str('last'), first: str('first'), phone: str('phone'),
       address: { a1: str('a1'), a2: str('a2'), city: str('city'), post: str('post') },
-      items: cart.map((l) => ({ name: l.name, sub: l.sub, qty: l.qty, unit: l.unit, tint: l.tint, pid: l.pid })),
+      items: cart.map((l) => ({ name: l.name, sub: l.sub, qty: l.qty, unit: l.unit, tint: l.tint, pid: l.pid, ...(l.note ? { note: l.note } : {}) })),
       sub: T.sub, disc: T.disc, code: disc, ship: T.ship, shipM, wrap: T.wrap, total: T.total, status: 'Processing',
-      pay: pay === 'card' ? 'Card ending ' + digits.slice(-4) : 'PayPal', note: str('gnote'), userId: user ? user.id : null, log: [{ s: 'Placed', d: iso }],
+      pay: pay === 'card' ? 'Card ending ' + digits.slice(-4) : 'PayPal', note: str('gnote'), sellerNote: str('snote').trim(), userId: user ? user.id : null, log: [{ s: 'Placed', d: iso }],
     };
     let finalId = id;
     if (remote) {
@@ -124,6 +124,7 @@ export function Checkout() {
                     {field('city', 'Town or city')}
                     {field('post', 'Postcode')}
                   </div>
+                  <Field label="Note for the seller (optional)" {...bind('snote')} rows={3} placeholder="Colour matching, delivery instructions, anything we should know" />
                   <Field label="Gift message (optional)" {...bind('gnote')} rows={2} placeholder="Added to the packing slip" />
                   <ErrorText>{err}</ErrorText>
                   <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between', flexWrap: 'wrap' }}>
@@ -182,7 +183,7 @@ export function Checkout() {
                   <div style={{ width: 48, height: 48, borderRadius: 8, background: l.tint, flex: 'none' }} />
                   <div style={{ flex: 1, minWidth: 0, fontSize: 14 }}>
                     <div style={{ fontWeight: 500 }}>{l.name}</div>
-                    <div className="muted">{l.sub} · Qty {l.qty}</div>
+                    <div className="muted">{lineText(l)} · Qty {l.qty}</div>
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{money(l.unit * l.qty)}</div>
                 </div>

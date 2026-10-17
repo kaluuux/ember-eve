@@ -1,7 +1,7 @@
 import { useApp } from '../AppContext';
 import { DiscountBox } from '../components/DiscountBox';
 import { Stepper } from '../components/ui';
-import { freeMessage } from '../commerce';
+import { freeMessage, lineText } from '../commerce';
 import { money } from '../store';
 
 export function Cart() {
@@ -26,7 +26,7 @@ export function Cart() {
                   <a href={href} aria-label={l.name} style={{ width: 80, height: 80, borderRadius: 8, background: l.tint, flex: 'none' }} />
                   <div style={{ flex: 1, minWidth: 160 }}>
                     <a href={href} style={{ fontSize: 16, fontWeight: 500, color: 'var(--ink)', textDecoration: 'none' }}>{l.name}</a>
-                    <div className="muted">{l.sub}</div>
+                    <div className="muted">{lineText(l)}</div>
                     <div className="muted">{money(l.unit)} each</div>
                     <button type="button" className="link-btn" style={{ marginTop: 4 }} onClick={() => setQty(l.key, -9999)}>Remove</button>
                   </div>

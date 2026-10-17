@@ -23,7 +23,7 @@ export function Configurator({ p, sel, onChange, size = 'lg' }: { p: Product; se
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {g.options.map((o) => (
               <Chip key={o.id} size={size === 'lg' ? 'wide' : 'lg'} on={sel.opts[g.id] === o.id} onClick={() => upd({ opts: { ...sel.opts, [g.id]: o.id } })}>
-                {o.label}{o.add ? ` (+${money(o.add)})` : ''}
+                {o.label}{o.add > 0 ? ` (+${money(o.add)})` : o.add < 0 ? ` (-${money(-o.add)})` : ''}
               </Chip>
             ))}
           </div>
