@@ -404,6 +404,92 @@ begin
 end $$;
 grant execute on function admin_patch_order(text, jsonb) to authenticated;
 
+-- ================================================================== phone alerts (ntfy.sh)
+-- The admin picks a private topic name; every new order and uploaded receipt is pushed to it.
+-- The topic is kept in a table nobody can read directly (it works like a password).
+do $$ begin
+  create extension if not exists pg_net with schema extensions;
+exception when others then
+  raise notice 'pg_net is not available; phone alerts are disabled';
+end $$;
+
+create table if not exists notify_config (key text primary key, value text not null);
+alter table notify_config enable row level security;   -- no policies on purpose
+
+create or replace function ee_notify(title text, message text, click text, prio int) returns void
+language plpgsql security definer set search_path = public as $$
+declare topic text; site text;
+begin
+  select value into topic from notify_config where key = 'topic';
+  if topic is null or topic = '' then return; end if;
+  select value into site from notify_config where key = 'site';
+  begin
+    perform net.http_post(
+      url := 'https://ntfy.sh/',
+      body := jsonb_strip_nulls(jsonb_build_object('topic', topic, 'title', title, 'message', message, 'priority', prio,
+        'tags', jsonb_build_array('candle'), 'click', case when coalesce(site, '') <> '' then site || click end)),
+      headers := jsonb_build_object('Content-Type', 'application/json'));
+  exception when others then
+    null;   -- an alert problem must never block an order
+  end;
+end $$;
+
+create or replace function ee_order_alert() returns trigger language plpgsql security definer set search_path = public as $$
+declare before_n int; after_n int; d jsonb := new.data;
+begin
+  if tg_op = 'INSERT' then
+    perform ee_notify('New order ' || new.id,
+      'Rs ' || to_char(coalesce((d ->> 'total')::numeric, 0), 'FM999,999,990') || ' · ' || coalesce(d ->> 'name', '') || ' · ' || coalesce(d ->> 'pay', '')
+        || ' · ' || jsonb_array_length(coalesce(d -> 'items', '[]'::jsonb)) || ' item(s)',
+      '/#/admin/orders?sel=' || new.id, 4);
+  else
+    before_n := jsonb_array_length(coalesce(old.data -> 'receipts', '[]'::jsonb));
+    after_n := jsonb_array_length(coalesce(new.data -> 'receipts', '[]'::jsonb));
+    if after_n > before_n then
+      perform ee_notify('Receipt uploaded for ' || new.id,
+        coalesce(d ->> 'name', '') || ' · Rs ' || to_char(coalesce((d ->> 'total')::numeric, 0), 'FM999,999,990') || ' · tap to check and approve',
+        '/#/admin/orders?sel=' || new.id, 4);
+    end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists orders_alert_insert on orders;
+create trigger orders_alert_insert after insert on orders for each row execute function ee_order_alert();
+drop trigger if exists orders_alert_update on orders;
+create trigger orders_alert_update after update of data on orders for each row execute function ee_order_alert();
+
+create or replace function admin_get_notify() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'not allowed'; end if;
+  return (select jsonb_build_object('topic', coalesce((select value from notify_config where key = 'topic'), ''),
+                                    'site', coalesce((select value from notify_config where key = 'site'), '')));
+end $$;
+
+create or replace function admin_set_notify(topic text, site text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'not allowed'; end if;
+  if topic = '' then
+    delete from notify_config where key in ('topic', 'site');
+    return;
+  end if;
+  if topic !~ '^[A-Za-z0-9_-]{12,64}$' then raise exception 'invalid topic'; end if;
+  insert into notify_config (key, value) values ('topic', topic) on conflict (key) do update set value = excluded.value;
+  insert into notify_config (key, value) values ('site', regexp_replace(coalesce(site, ''), '/+$', ''))
+    on conflict (key) do update set value = excluded.value;
+end $$;
+
+create or replace function admin_send_test() returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'not allowed'; end if;
+  perform ee_notify('Test alert', 'Phone alerts are working. You will get one for every new order and receipt.', '/#/admin/orders', 3);
+end $$;
+grant execute on function admin_get_notify() to authenticated;
+grant execute on function admin_set_notify(text, text) to authenticated;
+grant execute on function admin_send_test() to authenticated;
+
 -- ================================================================== reviews and messages
 create table if not exists reviews (
   id bigint generated always as identity primary key,

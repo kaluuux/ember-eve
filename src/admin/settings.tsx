@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { SL_DISTRICTS, get, set, useStored, DEFAULT_SETTINGS, withDefaults } from '../store';
 import { remote } from '../remote';
-import { addAdmin, adminEmail, exportAll, listAdmins, removeAdmin, useIsAdmin } from '../sync';
+import { addAdmin, adminEmail, exportAll, getNotify, listAdmins, removeAdmin, sendTestAlert, setNotify, useIsAdmin } from '../sync';
 import { ErrorText } from '../components/ui';
 import { PageHead } from './ui';
 import type { GiftBox, Settings } from '../types';
@@ -123,9 +123,59 @@ export function SettingsView({ flash }: { flash: Flash }) {
           <div><button type="button" className="btn-xs" onClick={() => up({ giftBoxes: d.giftBoxes.concat({ id: 'b' + Math.random().toString(36).slice(2, 7), label: '', slots: 3, fee: d.giftBoxFee }) })}>Add box size</button></div>
         </Section>
 
-        {remote ? <TeamAndBackup flash={flash} /> : <LocalPassword />}
+        {remote ? <><PhoneAlerts flash={flash} /><TeamAndBackup flash={flash} /></> : <LocalPassword />}
       </div>
     </>
+  );
+}
+
+/* ---------------------------------------------------------------- phone alerts */
+const newTopic = () => {
+  const a = new Uint8Array(12);
+  crypto.getRandomValues(a);
+  return 'ember-eve-' + Array.from(a, (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 20);
+};
+
+function PhoneAlerts({ flash }: { flash: Flash }) {
+  const isAdmin = useIsAdmin();
+  const [topic, setTopic] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (isAdmin) void getNotify().then((n) => setTopic(n?.topic ?? '')); }, [isAdmin]);
+
+  const enable = async () => {
+    setBusy(true);
+    const t = newTopic();
+    const e = await setNotify(t);
+    setBusy(false);
+    if (e) return flash(e);
+    setTopic(t); flash('Phone alerts are on');
+  };
+  const off = async () => { const e = await setNotify(''); if (e) return flash(e); setTopic(''); flash('Phone alerts are off'); };
+  const test = async () => { const e = await sendTestAlert(); flash(e || 'Test alert sent. Check your phone.'); };
+
+  return (
+    <Section title="Phone alerts" hint="Get an instant notification on your phone for every new order and every uploaded receipt. Free, using the ntfy app.">
+      {topic === null ? <div className="muted">Loading…</div> : topic === '' ? (
+        <div><button type="button" className="btn" disabled={busy} onClick={enable}>{busy ? 'Setting up…' : 'Turn on phone alerts'}</button></div>
+      ) : (
+        <>
+          <ol style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 14 }}>
+            <li>Install the free <b>ntfy</b> app on your phone (Google Play, App Store or F-Droid).</li>
+            <li>Open it, tap <b>+</b> (Subscribe to topic), and enter this private topic name exactly:</li>
+          </ol>
+          <div className="bank-box" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <code style={{ fontSize: 15, wordBreak: 'break-all' }}>{topic}</code>
+            <button type="button" className="btn-xs" onClick={() => { void navigator.clipboard?.writeText(topic); flash('Copied'); }}>Copy</button>
+          </div>
+          <div className="muted" style={{ fontSize: 13 }}>Keep the topic name private: anyone who knows it could read your alerts. Leave the server as ntfy.sh. Allow notifications when your phone asks.</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" className="btn" onClick={test}>Send a test alert</button>
+            <button type="button" className="btn ghost danger" onClick={off}>Turn off</button>
+            <button type="button" className="btn-xs" onClick={enable}>Create a new topic</button>
+          </div>
+        </>
+      )}
+    </Section>
   );
 }
 

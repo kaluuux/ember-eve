@@ -361,6 +361,23 @@ export async function removeAdmin(email: string): Promise<string> {
   return error ? (error.message.includes('last admin') ? 'You cannot remove the last admin.' : 'Could not remove: ' + error.message) : '';
 }
 
+/* ----------------------------------------------------------------- phone alerts */
+export async function getNotify(): Promise<{ topic: string; site: string } | null> {
+  if (!sb) return null;
+  const { data, error } = await sb.rpc('admin_get_notify');
+  return error ? null : (data as { topic: string; site: string });
+}
+export async function setNotify(topic: string): Promise<string> {
+  if (!sb) return 'Not connected.';
+  const { error } = await sb.rpc('admin_set_notify', { topic, site: window.location.origin });
+  return error ? 'Could not save. Run the latest schema.sql in Supabase first.' : '';
+}
+export async function sendTestAlert(): Promise<string> {
+  if (!sb) return 'Not connected.';
+  const { error } = await sb.rpc('admin_send_test');
+  return error ? 'Could not send the test alert.' : '';
+}
+
 /** Admin: everything in the shop as one JSON-able object. */
 export async function exportAll(): Promise<Record<string, unknown>> {
   const out: Record<string, unknown> = { exportedAt: new Date().toISOString() };

@@ -23,6 +23,7 @@ Copy `.env.example` to `.env.local` and fill in `VITE_SUPABASE_URL` and `VITE_SU
 4. Authentication > URL Configuration: set the Site URL to your live address (for password-reset links).
 5. Open `/#/admin`, sign in, and on **Catalogue** click **Publish starter catalogue**.
 6. In **Settings** fill in bank details, WhatsApp number, pickup address and delivery rates.
+7. In **Settings > Phone alerts** click **Turn on phone alerts**, install the free ntfy app, and subscribe to the topic shown. You then get a push for every new order and uploaded receipt (sent by the database through ntfy.sh; needs the `pg_net` extension, which Supabase enables by default).
 
 ## How an order works
 
