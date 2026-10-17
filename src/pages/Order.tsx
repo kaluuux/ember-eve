@@ -43,7 +43,10 @@ export function Order({ route }: { route: Route }) {
       <PaymentPanel o={ord} st={settings} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
         <h2 className="h2">Order {ord.id}</h2>
-        <span className="tag" style={{ fontSize: 14, background: ord.statusBg, color: ord.statusFg }}>{ord.status}</span>
+        <span style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <a href={'#/invoice/' + ord.id} className="btn ghost sm">View / print invoice</a>
+          <span className="tag" style={{ fontSize: 14, background: ord.statusBg, color: ord.statusFg }}>{ord.status}</span>
+        </span>
       </div>
       <div className="card" style={{ marginBottom: 24 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
@@ -136,7 +139,7 @@ function PaymentPanel({ o, st }: { o: OV; st: Settings }) {
         <div className="h3">Complete your payment · {money(o.total)}</div>
         <span className="tag" style={{ background: receipts ? '#DBEAFE' : '#FEF3C7', color: receipts ? '#1E40AF' : '#8A4B00' }}>{receipts ? 'Receipt received, awaiting approval' : 'Waiting for your payment'}</span>
       </div>
-      <BankAccounts accounts={st.banks} reference={o.id} />
+      <BankAccounts accounts={st.banks} reference={o.id} value={st.banks.find((b) => b.bank === o.payBank)?.id} />
       <div style={{ fontSize: 14, color: 'var(--text2)' }}>After paying, send us the receipt so we can approve your order. Either way works:</div>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         {remote && (

@@ -14,6 +14,7 @@ import { Gifts } from './pages/Gifts';
 import { Finder } from './pages/Finder';
 import { About, Contact, DOC_KEYS, Doc, Faq, NotFound, Track } from './pages/Info';
 import { Admin } from './admin/Admin';
+import { Invoice } from './pages/Invoice';
 
 function Page({ route }: { route: Route }) {
   const { setCartOpen, setQv } = useApp();
@@ -45,6 +46,7 @@ function Page({ route }: { route: Route }) {
 export default function App() {
   const route = useRoute();
   if (route.name === 'admin') return <Admin route={route} />;
+  if (route.name === 'invoice') return <AppProvider><Invoice route={route} /></AppProvider>;
   return (
     <AppProvider>
       <Layout>

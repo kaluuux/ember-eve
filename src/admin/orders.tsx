@@ -33,8 +33,8 @@ export function OrdersView({ sel, pay, status, flash }: { sel: string; pay: stri
   const selO = orders.find((o) => o.id === sel);
 
   const exportCsv = () => {
-    const head = ['Order', 'Date', 'Status', 'Payment status', 'Payment method', 'Customer', 'Email', 'Phone', 'Delivery', 'Address', 'District', 'Items', 'Subtotal', 'Discount', 'Code', 'Delivery fee', 'Gift wrap', 'Total', 'Courier', 'Tracking', 'Customer note', 'Gift message'];
-    const body = rows.map((o) => [o.id, o.date.slice(0, 10), o.status, payOf(o), o.pay, o.name, o.email, o.phone, o.shipM, [o.address.a1, o.address.a2, o.address.city, o.address.post].filter(Boolean).join(', '), o.address.district ?? '', o.items.map((i) => i.qty + ' x ' + i.name + ' (' + lineText(i) + ')').join(' | '), o.sub, o.disc, o.code, o.ship, o.wrap, o.total, o.tracking?.courier ?? '', o.tracking?.number ?? '', o.sellerNote ?? '', o.note]);
+    const head = ['Order', 'Date', 'Status', 'Payment status', 'Payment method', 'Paid to bank', 'Customer', 'Email', 'Phone', 'Delivery', 'Address', 'District', 'Items', 'Subtotal', 'Discount', 'Code', 'Delivery fee', 'Gift wrap', 'Total', 'Courier', 'Tracking', 'Customer note', 'Gift message'];
+    const body = rows.map((o) => [o.id, o.date.slice(0, 10), o.status, payOf(o), o.pay, o.payBank ?? '', o.name, o.email, o.phone, o.shipM, [o.address.a1, o.address.a2, o.address.city, o.address.post].filter(Boolean).join(', '), o.address.district ?? '', o.items.map((i) => i.qty + ' x ' + i.name + ' (' + lineText(i) + ')').join(' | '), o.sub, o.disc, o.code, o.ship, o.wrap, o.total, o.tracking?.courier ?? '', o.tracking?.number ?? '', o.sellerNote ?? '', o.note]);
     downloadCsv('orders', [head, ...body]);
   };
 
@@ -131,6 +131,7 @@ function OrderDetail({ o, settings, flash }: { o: Order; settings: Settings; fla
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
           {o.phone && <a className="btn-xs" href={waLink(o.phone, hello)} target="_blank" rel="noreferrer">WhatsApp customer</a>}
           {o.phone && <a className="btn-xs" href={'tel:' + o.phone}>Call</a>}
+          <a className="btn-xs" href={'#/invoice/' + o.id + '?back=admin/orders%3Fsel%3D' + o.id} target="_blank" rel="noreferrer">Invoice</a>
           <a className="btn-xs" href={'mailto:' + o.email + '?subject=' + encodeURIComponent('Your order ' + o.id)}>Email</a>
         </div>
       </div>
@@ -149,7 +150,7 @@ function OrderDetail({ o, settings, flash }: { o: Order; settings: Settings; fla
       )}
 
       <div className="block">
-        <h4>Payment · {o.pay}</h4>
+        <h4>Payment · {o.pay}{o.payBank ? ' · ' + o.payBank : ''}</h4>
         {o.payMethod === 'bank' && (
           <>
             {receipts.length === 0 && pay !== 'Paid' && <div className="muted" style={{ marginBottom: 8 }}>No receipt uploaded yet. The customer may send it on WhatsApp with order number {o.id}.</div>}

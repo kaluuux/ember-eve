@@ -29,7 +29,8 @@ Copy `.env.example` to `.env.local` and fill in `VITE_SUPABASE_URL` and `VITE_SU
 
 1. The browser sends only the customer's choices (candle, options, colours, notes). The server (`place_order`) prices everything from the live catalogue, checks stock, applies the discount and delivery rate, and returns the final order. Checkout shows the server's totals before the customer pays.
 2. Payment is by bank transfer: the order page shows your account details and the order number as reference. The customer uploads a receipt photo (private storage) or sends it on WhatsApp.
-3. In **Orders** you see the receipt, **Approve payment**, add courier and tracking, and move the order through Processing > Dispatched > Delivered.
+3. In **Orders** you see the receipt and which bank the customer chose, **Approve payment**, add courier and tracking, and move the order through Processing > Dispatched > Delivered.
+4. Every order has a printable invoice (`#/invoice/EE-1007`): customers open it from their order page, you open it from the order in Admin. Fill in the invoice details (business address, phone, registration number) in Settings > Store details.
 
 ## Routes (hash-based)
 

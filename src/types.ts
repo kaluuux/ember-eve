@@ -66,6 +66,12 @@ export interface Settings {
   /** Per-district standard delivery rate; districts not listed use `standard` */
   districts: District[];
   pickupAddress: string;
+  /** Shown on invoices */
+  businessAddress: string;
+  businessPhone: string;
+  /** Business registration / tax number, optional */
+  taxId: string;
+  invoiceNote: string;
   /** Number in international format without +, e.g. 94771234567 */
   whatsapp: string;
   banks: BankAccount[];
@@ -122,6 +128,8 @@ export interface Order {
   status: OrderStatus;
   pay: string;
   payMethod?: PayMethod;
+  /** Name of the shop bank account the customer chose to pay into */
+  payBank?: string | null;
   payStatus?: 'Pending' | 'Receipt sent' | 'Paid' | 'Failed';
   /** Storage paths of uploaded bank-transfer receipts */
   receipts?: string[];

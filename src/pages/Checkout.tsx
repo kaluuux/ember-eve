@@ -32,12 +32,15 @@ export function Checkout() {
   const [shipM, setShipM] = useState<ShipM>('standard');
   const [wrap, setWrap] = useState(false);
   const [payMethod, setPayMethod] = useState<PayMethod>('bank');
+  const [bankId, setBankId] = useState('');
   const [busy, setBusy] = useState(false);
   const [quote, setQuote] = useState<Order | null>(null);
 
   const pickupOn = st.pickupAddress.trim() !== '';
   const methods = (['bank', 'store', 'whatsapp'] as PayMethod[]).filter((m) => st.pay[m] && (m !== 'store' || shipM === 'pickup') && (m !== 'bank' || st.banks.some((b) => b.number.trim() !== '')));
   const pay: PayMethod = methods.includes(payMethod) ? payMethod : methods[0];
+  const banks = st.banks.filter((b) => b.number.trim());
+  const bank = banks.find((b) => b.id === bankId) ?? banks[0];
   const district = str('district');
 
   // online baskets must carry the customer's choices so the server can price them
@@ -57,7 +60,7 @@ export function Checkout() {
     email: str('email').trim(), name: (str('first') + ' ' + str('last')).trim(), first: str('first').trim(), phone: str('phone').trim(),
     address: shipM === 'pickup' ? { a1: '', a2: '', city: '', district: '', post: '' } : { a1: str('a1').trim(), a2: str('a2').trim(), city: str('city').trim(), district: str('district'), post: str('post').trim() },
     items: cart.map((l) => (l.box ? { pid: 0, qty: l.qty, box: l.box, boxId: l.boxId, note: l.note } : { pid: l.pid, qty: l.qty, sel: l.sel })),
-    code: disc, shipM, wrap, payMethod: pay, note: str('gnote').trim(), sellerNote: str('snote').trim(),
+    code: disc, shipM, wrap, payMethod: pay, payBank: pay === 'bank' ? bank?.bank : undefined, note: str('gnote').trim(), sellerNote: str('snote').trim(),
   });
 
   // the server's own totals for step 3 (and whenever the choices that affect price change)
@@ -68,7 +71,7 @@ export function Checkout() {
     quoteOrder(payload()).then((q) => { if (live) { setQuote(q); setErr(''); } }).catch((e) => { if (live) setErr(orderErrorText(e)); });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, shipM, wrap, pay, disc, cart, district]);
+  }, [step, shipM, wrap, pay, disc, cart, district, bankId]);
 
   const field = (name: string, label: string, o: { type?: string; ph?: string; span?: 1 | 2 } = {}) => <Field key={name} label={label} {...bind(name)} type={o.type} placeholder={o.ph} span={o.span} />;
 
@@ -106,7 +109,7 @@ export function Checkout() {
         id: 'EE-' + nextNum, date: iso, email: p.email, name: p.name, first: p.first, phone: p.phone, address: p.address,
         items: cart.map((l) => ({ name: l.name, sub: l.sub, qty: l.qty, unit: l.unit, tint: l.tint, pid: l.pid, ...(l.note ? { note: l.note } : {}), ...(l.box ? { box: l.box.map((c) => ({ pid: c.pid, name: get<Product[]>('products', []).find((x) => x.id === c.pid)?.name ?? '' })) } : {}) })),
         sub: T.sub, disc: T.disc, code: disc, ship: T.ship, shipM, wrap: T.wrap, total: T.total, status: 'Processing',
-        pay: PAY_INFO[pay].title, payMethod: pay, payStatus: 'Pending', note: p.note, sellerNote: p.sellerNote, userId: user ? user.id : null, log: [{ s: 'Placed', d: iso }],
+        pay: PAY_INFO[pay].title, payMethod: pay, payBank: pay === 'bank' ? bank?.bank ?? null : null, payStatus: 'Pending', note: p.note, sellerNote: p.sellerNote, userId: user ? user.id : null, log: [{ s: 'Placed', d: iso }],
       };
       const products = get<Product[]>('products', []);
       cart.forEach((l) => {
@@ -210,7 +213,7 @@ export function Checkout() {
                   {methods.map((m) => <OptionRow key={m} on={pay === m} onClick={() => setPayMethod(m)} title={PAY_INFO[m].title} sub={PAY_INFO[m].sub} price="" />)}
                   {pay === 'bank' && (
                     <div className="stack" style={{ gap: 8 }}>
-                      <BankAccounts accounts={st.banks} />
+                      <BankAccounts accounts={st.banks} value={bank?.id} onChange={setBankId} />
                       <div className="muted" style={{ fontSize: 13 }}>You will get your order number on the next page. Use it as the payment reference.</div>
                     </div>
                   )}

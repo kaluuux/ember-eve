@@ -65,6 +65,13 @@ export function SettingsView({ flash }: { flash: Flash }) {
             <Label label="WhatsApp number for orders (digits, with country code)"><input className="input" inputMode="numeric" placeholder="94771234567" value={d.whatsapp} onChange={(e) => up({ whatsapp: e.target.value.replace(/\D/g, '') })} /></Label>
             <Label label="Store pickup address (leave empty to turn pickup off)"><input className="input" value={d.pickupAddress} onChange={(e) => up({ pickupAddress: e.target.value })} /></Label>
           </div>
+          <div className="h3" style={{ fontSize: 14, marginTop: 4 }}>Invoice details</div>
+          <div className="fields two">
+            <Label label="Business address"><input className="input" value={d.businessAddress} onChange={(e) => up({ businessAddress: e.target.value })} /></Label>
+            <Label label="Business phone"><input className="input" value={d.businessPhone} onChange={(e) => up({ businessPhone: e.target.value })} /></Label>
+            <Label label="Registration / tax number (optional)"><input className="input" value={d.taxId} onChange={(e) => up({ taxId: e.target.value })} /></Label>
+            <Label label="Thank-you line at the bottom"><input className="input" placeholder="Thank you for choosing Ember & Eve." value={d.invoiceNote} onChange={(e) => up({ invoiceNote: e.target.value })} /></Label>
+          </div>
         </Section>
 
         <Section title="Delivery" hint="Customers in a district with its own rate pay that rate; all others pay the standard rate." onSave={() => save('delivery')} saved={saved}>

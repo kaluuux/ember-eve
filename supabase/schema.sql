@@ -164,7 +164,7 @@ declare
   qty int; unit numeric; fee numeric; sub numeric := 0; parts text[]; slots int; n int;
   code text; dsc jsonb; disc numeric := 0; free_ship boolean := false;
   ship_m text; ship numeric; wrap numeric := 0; net numeric; district text; rate numeric;
-  pay_m text; pay_label text; nm text; ph text; em text; a1 text; city text; payset jsonb;
+  pay_m text; pay_label text; pay_bank text; nm text; ph text; em text; a1 text; city text; payset jsonb;
   pid_txt text; stock_txt text; first_hex text; now_iso text := to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"');
 begin
   st := defaults || coalesce((select value from catalog_kv where key = 'settings'), '{}'::jsonb);
@@ -272,12 +272,17 @@ begin
   elsif pay_m = 'store' and coalesce((payset ->> 'store')::boolean, false) and ship_m = 'pickup' then pay_label := 'Pay at store pickup';
   else raise exception 'invalid:payment';
   end if;
+  -- which of the shop's bank accounts the customer chose (must match a saved account)
+  if pay_m = 'bank' and btrim(coalesce(o ->> 'payBank', '')) <> '' then
+    select b ->> 'bank' into pay_bank from jsonb_array_elements(coalesce(st -> 'banks', '[]'::jsonb)) b
+      where lower(b ->> 'bank') = lower(btrim(o ->> 'payBank')) limit 1;
+  end if;
 
   return jsonb_build_object(
     'date', now_iso, 'email', em, 'name', nm, 'first', left(btrim(coalesce(o ->> 'first', '')), 80), 'phone', ph,
     'address', jsonb_build_object('a1', a1, 'a2', btrim(coalesce(o #>> '{address,a2}', '')), 'city', city, 'district', district, 'post', btrim(coalesce(o #>> '{address,post}', ''))),
     'items', items, 'sub', sub, 'disc', disc, 'code', code, 'ship', ship, 'shipM', ship_m, 'wrap', wrap, 'total', net + ship + wrap,
-    'status', 'Processing', 'pay', pay_label, 'payMethod', pay_m, 'payStatus', 'Pending',
+    'status', 'Processing', 'pay', pay_label, 'payMethod', pay_m, 'payBank', pay_bank, 'payStatus', 'Pending',
     'note', left(btrim(coalesce(o ->> 'note', '')), 500), 'sellerNote', left(btrim(coalesce(o ->> 'sellerNote', '')), 1000),
     'userId', auth.uid()::text, 'log', jsonb_build_array(jsonb_build_object('s', 'Placed', 'd', now_iso)),
     '_need', need);
