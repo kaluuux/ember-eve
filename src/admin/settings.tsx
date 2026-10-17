@@ -70,7 +70,8 @@ export function SettingsView({ flash }: { flash: Flash }) {
             <Label label="Business address"><input className="input" value={d.businessAddress} onChange={(e) => up({ businessAddress: e.target.value })} /></Label>
             <Label label="Business phone"><input className="input" value={d.businessPhone} onChange={(e) => up({ businessPhone: e.target.value })} /></Label>
             <Label label="Registration / tax number (optional)"><input className="input" value={d.taxId} onChange={(e) => up({ taxId: e.target.value })} /></Label>
-            <Label label="Thank-you line at the bottom"><input className="input" placeholder="Thank you for choosing Ember & Eve." value={d.invoiceNote} onChange={(e) => up({ invoiceNote: e.target.value })} /></Label>
+            <Label label="Note on unpaid invoices"><input className="input" placeholder="Please confirm the order details and delivery information before payment" value={d.invoiceNote} onChange={(e) => up({ invoiceNote: e.target.value })} /></Label>
+            <Label label="Payment due after (days)"><input className="input" type="number" min={0} value={d.invoiceDueDays} onChange={(e) => up({ invoiceDueDays: num(e.target.value) })} /></Label>
           </div>
         </Section>
 

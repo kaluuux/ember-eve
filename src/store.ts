@@ -95,7 +95,7 @@ export function money(n: number): string {
 export const DEFAULT_SETTINGS: Settings = {
   shop: 'Ember & Eve', email: 'hello@emberandeve.example', standard: 450, express: 900, freeOver: 8000, giftWrap: 300,
   freeColors: 3, extraColorFee: 100, giftBoxFee: 1000, giftBoxes: [], districts: [],
-  pickupAddress: '', businessAddress: '', businessPhone: '', taxId: '', invoiceNote: '', whatsapp: '', banks: [],
+  pickupAddress: '', businessAddress: '', businessPhone: '', taxId: '', invoiceNote: '', invoiceDueDays: 10, whatsapp: '', banks: [],
   pay: { card: false, bank: true, whatsapp: false, store: false }, payhereMerchantId: '', payhereSandbox: true,
 };
 

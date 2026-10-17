@@ -71,7 +71,10 @@ export interface Settings {
   businessPhone: string;
   /** Business registration / tax number, optional */
   taxId: string;
+  /** Line on unpaid invoices, e.g. asking the customer to confirm details before paying */
   invoiceNote: string;
+  /** Days after the order date that payment is due (shown on unpaid invoices) */
+  invoiceDueDays: number;
   /** Number in international format without +, e.g. 94771234567 */
   whatsapp: string;
   banks: BankAccount[];
