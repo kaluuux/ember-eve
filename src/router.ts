@@ -37,6 +37,17 @@ function restoreScroll(y: number) {
   step();
 }
 
+/** Read-only current route (no scroll handling), for things like highlighting the active nav tab. */
+export function useCurrentRoute(): Route {
+  const [r, setR] = useState<Route>(() => parseHash());
+  useEffect(() => {
+    const on = () => setR(parseHash());
+    window.addEventListener('hashchange', on);
+    return () => window.removeEventListener('hashchange', on);
+  }, []);
+  return r;
+}
+
 export function useRoute(): Route {
   const [r, setR] = useState<Route>(() => parseHash());
   const hash = useRef(location.hash);

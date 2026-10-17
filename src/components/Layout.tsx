@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useApp } from '../AppContext';
-import { go } from '../router';
+import { go, useCurrentRoute } from '../router';
 import { get, isEmail, money, set } from '../store';
 import type { Subscriber } from '../types';
 import { CartDrawer } from './CartDrawer';
 import { QuickViewModal } from './QuickViewModal';
 
 /** Click (or hover on desktop) to open; closes on outside click, Escape, or choosing a link. */
-function NavDropdown({ label, children }: { label: string; children: ReactNode }) {
+function NavDropdown({ label, active, children }: { label: string; active?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -20,7 +20,7 @@ function NavDropdown({ label, children }: { label: string; children: ReactNode }
   }, [open]);
   return (
     <div className="dd" ref={ref} onMouseEnter={() => matchMedia('(hover: hover)').matches && setOpen(true)} onMouseLeave={() => matchMedia('(hover: hover)').matches && setOpen(false)}>
-      <button type="button" className="dd-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>{label} <span aria-hidden="true" style={{ fontSize: 10 }}>▾</span></button>
+      <button type="button" className={'dd-btn' + (active ? ' on' : '')} aria-current={active ? 'page' : undefined} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>{label} <span aria-hidden="true" style={{ fontSize: 10 }}>▾</span></button>
       {open && <div className="dd-menu" role="menu" onClick={() => setOpen(false)}>{children}</div>}
     </div>
   );
@@ -30,6 +30,11 @@ export function Layout({ children }: { children: ReactNode }) {
   const { settings, categories, liveSeasons, seasonal, cart, wish, user, setCartOpen, toast, flash, cookieAccepted, acceptCookie } = useApp();
   const [hq, setHq] = useState('');
   const [nl, setNl] = useState('');
+  const r = useCurrentRoute();
+  const onShop = r.name === 'shop';
+  const seasonalMode = onShop && r.q.seasonal === '1';
+  const inCollection = onShop && (!!r.q.cat || seasonalMode);
+  const here = (name: string) => (r.name === name ? { className: 'on', 'aria-current': 'page' as const } : {});
   const cartCount = cart.reduce((a, x) => a + x.qty, 0);
 
   const doSearch = (e: FormEvent) => { e.preventDefault(); go('shop?q=' + encodeURIComponent(hq)); };
@@ -51,15 +56,15 @@ export function Layout({ children }: { children: ReactNode }) {
             <span style={{ fontFamily: 'var(--serif)', fontSize: 20 }}>Ember &amp; Eve</span>
           </a>
           <nav className="nav" aria-label="Main">
-            <a href="#/shop">Shop</a>
-            <NavDropdown label="Our Collection">
-              {categories.map((c) => <a key={c.id} role="menuitem" href={'#/shop?cat=' + c.id}>{c.name.replace(' Candles', '')}</a>)}
-              {seasonal.length > 0 && <a role="menuitem" href="#/shop?seasonal=1">Seasonal</a>}
+            <a href="#/shop" {...((onShop && !inCollection && !r.q.season) || r.name === 'product' ? { className: 'on', 'aria-current': 'page' as const } : {})}>Shop</a>
+            <NavDropdown label="Our Collection" active={inCollection}>
+              {categories.map((c) => <a key={c.id} role="menuitem" href={'#/shop?cat=' + c.id} {...(onShop && r.q.cat === c.id ? { className: 'on', 'aria-current': 'page' as const } : {})}>{c.name.replace(' Candles', '')}</a>)}
+              {seasonal.length > 0 && <a role="menuitem" href="#/shop?seasonal=1" {...(seasonalMode ? { className: 'on', 'aria-current': 'page' as const } : {})}>Seasonal</a>}
             </NavDropdown>
-            {liveSeasons.map((x) => <a key={x.id} href={'#/shop?season=' + x.id} style={{ color: '#F2C9A0' }}>{x.name.replace(' Collection', '')}</a>)}
-            <a href="#/gifts">Gift Box</a>
-            <a href="#/about">About</a>
-            <a href="#/contact">Contact</a>
+            {liveSeasons.map((x) => <a key={x.id} href={'#/shop?season=' + x.id} style={{ color: '#F2C9A0' }} {...(onShop && !seasonalMode && r.q.season === x.id ? { className: 'on', 'aria-current': 'page' as const } : {})}>{x.name.replace(' Collection', '')}</a>)}
+            <a href="#/gifts" {...here('gifts')}>Gift Box</a>
+            <a href="#/about" {...here('about')}>About</a>
+            <a href="#/contact" {...here('contact')}>Contact</a>
           </nav>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <form onSubmit={doSearch} style={{ margin: 0 }} role="search">
