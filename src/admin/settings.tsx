@@ -1,10 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { SL_DISTRICTS, get, set, useStored, DEFAULT_SETTINGS, withDefaults } from '../store';
 import { remote } from '../remote';
-import { addAdmin, adminEmail, exportAll, getNotify, listAdmins, removeAdmin, sendTestAlert, setNotify, useIsAdmin } from '../sync';
+import { addAdmin, adminEmail, exportAll, getNotify, listAdmins, removeAdmin, sendTestAlert, setNotify, uploadQr, useIsAdmin } from '../sync';
 import { ErrorText } from '../components/ui';
 import { PageHead } from './ui';
-import type { GiftBox, Settings } from '../types';
+import type { BankAccount, GiftBox, Settings } from '../types';
 
 type Flash = (m: string) => void;
 
@@ -41,7 +41,7 @@ export function SettingsView({ flash }: { flash: Flash }) {
   useEffect(() => { setD(stored); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [JSON.stringify(stored)]);
 
   const save = (section: string) => {
-    if (d.pay.bank && !d.bank.number.trim()) return setErr('Add your bank account number, or turn bank transfer off.');
+    if (d.pay.bank && !d.banks.some((b) => b.number.trim())) return setErr('Add a bank account number, or turn bank transfer off.');
     if (d.whatsapp && !/^\d{9,15}$/.test(d.whatsapp)) return setErr('WhatsApp number: digits only with country code, for example 94771234567.');
     setErr('');
     set('settings', { ...withDefaults(get<Settings>('settings', DEFAULT_SETTINGS)), ...d });
@@ -49,6 +49,7 @@ export function SettingsView({ flash }: { flash: Flash }) {
     void section;
   };
 
+  const setBank = (i: number, o: Partial<BankAccount>) => up({ banks: d.banks.map((x, j) => (j === i ? { ...x, ...o } : x)) });
   const setBox = (i: number, o: Partial<GiftBox>) => up({ giftBoxes: d.giftBoxes.map((b, j) => (j === i ? { ...b, ...o } : b)) });
 
   return (
@@ -98,11 +99,10 @@ export function SettingsView({ flash }: { flash: Flash }) {
             <Toggle on={d.pay.store} onChange={(v) => up({ pay: { ...d.pay, store: v } })} title="Pay at store pickup" sub="Only offered when the customer chooses store pickup." />
             <Toggle on={d.pay.whatsapp} onChange={(v) => up({ pay: { ...d.pay, whatsapp: v } })} title="Arrange payment on WhatsApp" sub="No payment details shown; you confirm payment with the customer yourself." />
           </div>
-          <div className="fields two">
-            <Label label="Bank"><input className="input" value={d.bank.bank} onChange={(e) => up({ bank: { ...d.bank, bank: e.target.value } })} /></Label>
-            <Label label="Branch"><input className="input" value={d.bank.branch} onChange={(e) => up({ bank: { ...d.bank, branch: e.target.value } })} /></Label>
-            <Label label="Account name"><input className="input" value={d.bank.name} onChange={(e) => up({ bank: { ...d.bank, name: e.target.value } })} /></Label>
-            <Label label="Account number"><input className="input" value={d.bank.number} onChange={(e) => up({ bank: { ...d.bank, number: e.target.value } })} /></Label>
+          <div className="stack" style={{ gap: 12 }}>
+            {d.banks.map((b, i) => <BankEditor key={b.id} b={b} n={i + 1} onChange={(o) => setBank(i, o)} onRemove={() => up({ banks: d.banks.filter((_, j) => j !== i) })} flash={flash} />)}
+            <div><button type="button" className="btn-xs" onClick={() => up({ banks: d.banks.concat({ id: 'bk' + Math.random().toString(36).slice(2, 7), bank: '', branch: '', name: '', number: '', qr: '' }) })}>Add bank account</button></div>
+            <div className="muted" style={{ fontSize: 13 }}>Customers choose their bank, then see its LankaQR code and account details. Upload the QR image from your bank app (a screenshot works). Click Save when you are done.</div>
           </div>
         </Section>
 
@@ -126,6 +126,45 @@ export function SettingsView({ flash }: { flash: Flash }) {
         {remote ? <><PhoneAlerts flash={flash} /><TeamAndBackup flash={flash} /></> : <LocalPassword />}
       </div>
     </>
+  );
+}
+
+/* ------------------------------------------------------------ bank account + QR */
+function BankEditor({ b, n, onChange, onRemove, flash }: { b: BankAccount; n: number; onChange: (o: Partial<BankAccount>) => void; onRemove: () => void; flash: Flash }) {
+  const file = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const pick = async (f: File | undefined) => {
+    if (!f) return;
+    setBusy(true);
+    const r = await uploadQr(f);
+    setBusy(false);
+    if (r.error) return flash(r.error);
+    onChange({ qr: r.url });
+    flash('QR uploaded. Click Save to publish it.');
+  };
+  return (
+    <div className="card" style={{ background: 'var(--a-bg)', padding: 16 }}>
+      <div className="row-between" style={{ marginBottom: 12 }}>
+        <b>Bank account {n}{b.bank ? ' · ' + b.bank : ''}</b>
+        <button type="button" className="btn-xs danger" onClick={onRemove}>Remove</button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 150px', gap: 16, alignItems: 'start' }}>
+        <div className="fields two">
+          <Label label="Bank"><input className="input" placeholder="e.g. Commercial Bank" value={b.bank} onChange={(e) => onChange({ bank: e.target.value })} /></Label>
+          <Label label="Branch"><input className="input" value={b.branch} onChange={(e) => onChange({ branch: e.target.value })} /></Label>
+          <Label label="Account name"><input className="input" value={b.name} onChange={(e) => onChange({ name: e.target.value })} /></Label>
+          <Label label="Account number"><input className="input" value={b.number} onChange={(e) => onChange({ number: e.target.value })} /></Label>
+        </div>
+        <div className="stack" style={{ gap: 8, alignItems: 'stretch' }}>
+          <div className="label-s" style={{ margin: 0 }}>LankaQR code</div>
+          {b.qr ? <img src={b.qr} alt={'QR for ' + (b.bank || 'bank')} style={{ width: '100%', aspectRatio: '1', objectFit: 'contain', background: '#fff', border: '1px solid var(--a-line)', borderRadius: 10 }} />
+            : <div className="muted" style={{ aspectRatio: '1', border: '1px dashed #CFC6BA', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontSize: 12, padding: 8 }}>No QR yet</div>}
+          <input ref={file} type="file" accept="image/*" hidden onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ''; }} />
+          <button type="button" className="btn-xs" disabled={busy} onClick={() => file.current?.click()}>{busy ? 'Uploading…' : b.qr ? 'Replace QR' : 'Upload QR'}</button>
+          {b.qr && <button type="button" className="btn-xs danger" onClick={() => onChange({ qr: '' })}>Remove QR</button>}
+        </div>
+      </div>
+    </div>
   );
 }
 

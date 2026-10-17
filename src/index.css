@@ -189,3 +189,7 @@ button { color: inherit; }
 .row-between { display: flex; justify-content: space-between; align-items: center; }
 .bank-box { background: var(--cream); border: 1px solid var(--sand); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
 .notice-warn { background: #FEF3C7; color: #8A4B00; border-radius: 10px; padding: 12px 14px; font-size: 14px; }
+
+.bank-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.bank-card { gap: 6px; }
+.bank-qr { width: 100%; max-width: 220px; aspect-ratio: 1; object-fit: contain; background: #fff; border: 1px solid var(--sand); border-radius: 12px; padding: 8px; align-self: flex-start; }

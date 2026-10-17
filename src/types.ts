@@ -47,6 +47,8 @@ export interface Discount {
 export type PayMethod = 'card' | 'bank' | 'whatsapp' | 'store';
 export interface GiftBox { id: string; label: string; slots: number; fee: number }
 export interface District { name: string; rate: number }
+/** A bank account customers can pay into, with an optional LankaQR image (a URL, or a data URL in the offline demo) */
+export interface BankAccount { id: string; bank: string; branch: string; name: string; number: string; qr: string }
 
 export interface Settings {
   shop: string;
@@ -66,7 +68,9 @@ export interface Settings {
   pickupAddress: string;
   /** Number in international format without +, e.g. 94771234567 */
   whatsapp: string;
-  bank: { bank: string; name: string; number: string; branch: string };
+  banks: BankAccount[];
+  /** Old single-account field, converted into `banks` when settings are read */
+  bank?: { bank: string; name: string; number: string; branch: string };
   pay: Record<PayMethod, boolean>;
   payhereMerchantId: string;
   payhereSandbox: boolean;

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../AppContext';
 import { DiscountBox } from '../components/DiscountBox';
+import { BankAccounts } from '../components/BankAccounts';
 import { Summary } from './Cart';
 import { ErrorText, Field, useForm } from '../components/ui';
 import { computeTotals, lineText, type Totals } from '../commerce';
@@ -13,7 +14,7 @@ import type { CartLine, Order, PayMethod, Product, User } from '../types';
 type ShipM = 'standard' | 'express' | 'pickup';
 
 const PAY_INFO: Record<PayMethod, { title: string; sub: string }> = {
-  bank: { title: 'Bank transfer', sub: 'Pay into our account, then upload your receipt or send it on WhatsApp. We approve it and start pouring.' },
+  bank: { title: 'Bank transfer / LankaQR', sub: 'Scan a LankaQR code or pay into our account, then upload your receipt or send it on WhatsApp. We approve it and start pouring.' },
   store: { title: 'Pay at store pickup', sub: 'Pay when you collect your order.' },
   whatsapp: { title: 'Arrange payment on WhatsApp', sub: 'We will message you to arrange payment.' },
   card: { title: 'Card', sub: '' },
@@ -35,7 +36,7 @@ export function Checkout() {
   const [quote, setQuote] = useState<Order | null>(null);
 
   const pickupOn = st.pickupAddress.trim() !== '';
-  const methods = (['bank', 'store', 'whatsapp'] as PayMethod[]).filter((m) => st.pay[m] && (m !== 'store' || shipM === 'pickup') && (m !== 'bank' || st.bank.number.trim() !== ''));
+  const methods = (['bank', 'store', 'whatsapp'] as PayMethod[]).filter((m) => st.pay[m] && (m !== 'store' || shipM === 'pickup') && (m !== 'bank' || st.banks.some((b) => b.number.trim() !== '')));
   const pay: PayMethod = methods.includes(payMethod) ? payMethod : methods[0];
   const district = str('district');
 
@@ -208,11 +209,8 @@ export function Checkout() {
                   )}
                   {methods.map((m) => <OptionRow key={m} on={pay === m} onClick={() => setPayMethod(m)} title={PAY_INFO[m].title} sub={PAY_INFO[m].sub} price="" />)}
                   {pay === 'bank' && (
-                    <div className="bank-box">
-                      <b>Our bank details</b>
-                      <div>{st.bank.bank}{st.bank.branch ? ' · ' + st.bank.branch : ''}</div>
-                      <div>{st.bank.name}</div>
-                      <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: 0.5 }}>{st.bank.number}</div>
+                    <div className="stack" style={{ gap: 8 }}>
+                      <BankAccounts accounts={st.banks} />
                       <div className="muted" style={{ fontSize: 13 }}>You will get your order number on the next page. Use it as the payment reference.</div>
                     </div>
                   )}

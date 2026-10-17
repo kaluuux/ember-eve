@@ -361,6 +361,34 @@ export async function removeAdmin(email: string): Promise<string> {
   return error ? (error.message.includes('last admin') ? 'You cannot remove the last admin.' : 'Could not remove: ' + error.message) : '';
 }
 
+/* --------------------------------------------------------------- shop images (QR codes) */
+/** Shrink an image so a QR code stays sharp but small (max 700px). Returns a PNG blob. */
+async function shrinkImage(file: File): Promise<Blob> {
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, 700 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
+  return await new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('image'))), 'image/png'));
+}
+
+/** Admin: upload a QR image. Online it goes to public storage and a URL comes back; offline it becomes a data URL. */
+export async function uploadQr(file: File): Promise<{ url: string; error: string }> {
+  try {
+    const blob = await shrinkImage(file);
+    if (!sb) {
+      const url = await new Promise<string>((res) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.readAsDataURL(blob); });
+      return { url, error: '' };
+    }
+    const path = 'qr/' + Date.now() + '.png';
+    const up = await sb.storage.from('shop-assets').upload(path, blob, { contentType: 'image/png' });
+    if (up.error) return { url: '', error: 'Could not upload. Run the latest schema.sql in Supabase, then try again.' };
+    return { url: sb.storage.from('shop-assets').getPublicUrl(path).data.publicUrl, error: '' };
+  } catch {
+    return { url: '', error: 'That file is not a readable image. Use a PNG or JPG.' };
+  }
+}
+
 /* ----------------------------------------------------------------- phone alerts */
 export async function getNotify(): Promise<{ topic: string; site: string } | null> {
   if (!sb) return null;

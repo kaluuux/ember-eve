@@ -5,6 +5,7 @@ import { get, money, useStored, EMPTY } from '../store';
 import { remote } from '../remote';
 import { uploadReceipt } from '../sync';
 import { ErrorText } from '../components/ui';
+import { BankAccounts } from '../components/BankAccounts';
 import type { Order as OrderT, Settings } from '../types';
 import type { Route } from '../router';
 
@@ -135,13 +136,7 @@ function PaymentPanel({ o, st }: { o: OV; st: Settings }) {
         <div className="h3">Complete your payment · {money(o.total)}</div>
         <span className="tag" style={{ background: receipts ? '#DBEAFE' : '#FEF3C7', color: receipts ? '#1E40AF' : '#8A4B00' }}>{receipts ? 'Receipt received, awaiting approval' : 'Waiting for your payment'}</span>
       </div>
-      <div className="bank-box">
-        <div className="muted" style={{ fontSize: 13 }}>Transfer to</div>
-        <div>{st.bank.bank}{st.bank.branch ? ' · ' + st.bank.branch : ''}</div>
-        <div>{st.bank.name}</div>
-        <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: 0.5 }}>{st.bank.number}</div>
-        <div style={{ marginTop: 6 }}>Reference: <b>{o.id}</b></div>
-      </div>
+      <BankAccounts accounts={st.banks} reference={o.id} />
       <div style={{ fontSize: 14, color: 'var(--text2)' }}>After paying, send us the receipt so we can approve your order. Either way works:</div>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         {remote && (

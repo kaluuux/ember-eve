@@ -95,14 +95,14 @@ export function money(n: number): string {
 export const DEFAULT_SETTINGS: Settings = {
   shop: 'Ember & Eve', email: 'hello@emberandeve.example', standard: 450, express: 900, freeOver: 8000, giftWrap: 300,
   freeColors: 3, extraColorFee: 100, giftBoxFee: 1000, giftBoxes: [], districts: [],
-  pickupAddress: '', whatsapp: '', bank: { bank: '', name: '', number: '', branch: '' },
+  pickupAddress: '', whatsapp: '', banks: [],
   pay: { card: false, bank: true, whatsapp: false, store: false }, payhereMerchantId: '', payhereSandbox: true,
 };
 
 /** Settings saved before a field existed simply lack it; fill in the defaults. */
 export const withDefaults = (s: Partial<Settings> | undefined): Settings => ({
   ...DEFAULT_SETTINGS, ...s,
-  bank: { ...DEFAULT_SETTINGS.bank, ...s?.bank },
+  banks: s?.banks?.length ? s.banks : s?.bank?.number ? [{ id: 'bank1', qr: '', ...s.bank }] : [],
   pay: { ...DEFAULT_SETTINGS.pay, ...s?.pay },
 });
 

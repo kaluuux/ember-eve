@@ -404,6 +404,18 @@ begin
 end $$;
 grant execute on function admin_patch_order(text, jsonb) to authenticated;
 
+-- ================================================================== shop images (LankaQR codes)
+-- Public so customers can see the QR; only admins can add or change files.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('shop-assets', 'shop-assets', true, 2097152, array['image/png', 'image/jpeg', 'image/webp'])
+on conflict (id) do update set file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types, public = true;
+drop policy if exists "shop assets admin write" on storage.objects;
+drop policy if exists "shop assets admin update" on storage.objects;
+drop policy if exists "shop assets admin delete" on storage.objects;
+create policy "shop assets admin write" on storage.objects for insert with check (bucket_id = 'shop-assets' and is_admin());
+create policy "shop assets admin update" on storage.objects for update using (bucket_id = 'shop-assets' and is_admin());
+create policy "shop assets admin delete" on storage.objects for delete using (bucket_id = 'shop-assets' and is_admin());
+
 -- ================================================================== phone alerts (ntfy.sh)
 -- The admin picks a private topic name; every new order and uploaded receipt is pushed to it.
 -- The topic is kept in a table nobody can read directly (it works like a password).
