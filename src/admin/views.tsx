@@ -2,6 +2,8 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { EMPTY, addressBook, fmtDate, get, money, set, useStored } from '../store';
 import { PageHead, StatusBadge, downloadCsv, waLink } from './ui';
 import { Chip, ErrorText, Field, useForm } from '../components/ui';
+import { cashOf } from '../profit';
+import { reviewPhotoUrl } from '../sync';
 import type { Discount, Message, Order, Product, Review, User } from '../types';
 
 type Flash = (m: string) => void;
@@ -28,7 +30,7 @@ export function Customers() {
       byEmail.set(k, c);
     });
     live.forEach((o) => byEmail.get(o.email.toLowerCase())?.os.push(o));
-    return [...byEmail.values()].map((c) => ({ ...c, spent: c.os.reduce((a, o) => a + o.total, 0) })).sort((a, b) => b.spent - a.spent);
+    return [...byEmail.values()].map((c) => ({ ...c, spent: c.os.reduce((a, o) => a + cashOf(o), 0) })).sort((a, b) => b.spent - a.spent);
   }, [users, orders]);
 
   const shown = rows.filter((c) => !q || (c.name + c.email + c.phone).toLowerCase().includes(q.toLowerCase()));
@@ -88,9 +90,9 @@ export function Customers() {
             <div className="block">
               <h4>Orders</h4>
               {cur.all.length === 0 ? <span className="muted">No orders yet.</span> : cur.all.slice().sort((a, b) => b.date.localeCompare(a.date)).map((o) => (
-                <a key={o.id} href={'#/admin/orders?sel=' + o.id} className="row-between" style={{ padding: '8px 0', borderBottom: '1px solid var(--a-line-soft)', textDecoration: 'none', color: 'inherit', gap: 8 }}>
+                <a key={o.id} href={'/admin/orders?sel=' + o.id} className="row-between" style={{ padding: '8px 0', borderBottom: '1px solid var(--a-line-soft)', textDecoration: 'none', color: 'inherit', gap: 8 }}>
                   <span><b>{o.id}</b> · {fmtDate(o.date, { day: 'numeric', month: 'short' })}</span>
-                  <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><StatusBadge status={o.status} /><b>{money(o.total)}</b></span>
+                  <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><StatusBadge status={o.status} /><b>{money(cashOf(o))}</b></span>
                 </a>
               ))}
             </div>
@@ -171,8 +173,9 @@ export function ReviewsView() {
         {reviews.slice().reverse().map((r) => (
           <div key={r.id} className="card" style={{ padding: 16, display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ flex: 1, minWidth: 240 }}>
-              <div style={{ fontSize: 12, color: 'var(--muted2)' }}>{pname(r.pid)} · {r.stars} / 5 · {r.who} · {r.date}</div>
+              <div style={{ fontSize: 12, color: 'var(--muted2)' }}>{pname(r.pid)} · {r.stars} / 5 · {r.who} · {r.date}{r.verified ? ' · Verified buyer' + (r.orderId ? ' (' + r.orderId + ')' : '') : ''}</div>
               <div style={{ fontSize: 16, lineHeight: '24px' }}>{r.q}</div>
+              {!!r.photos?.length && <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>{r.photos.map((p) => <a key={p} href={reviewPhotoUrl(p)} target="_blank" rel="noreferrer"><img src={reviewPhotoUrl(p)} alt="Customer photo" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8 }} /></a>)}</div>}
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <span className="tag" style={{ background: r.approved ? '#DCFCE7' : '#FEF3C7', color: r.approved ? '#166534' : '#8A4B00' }}>{r.approved ? 'Published' : 'Pending'}</span>

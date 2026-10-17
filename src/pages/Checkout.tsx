@@ -8,11 +8,14 @@ import { ErrorText, Field, useForm } from '../components/ui';
 import { computeTotals, lineText, type Totals, soft } from '../commerce';
 import { EMPTY, SL_DISTRICTS, addressBook, get, isEmail, money, set, setLocal, useStored } from '../store';
 import { remote } from '../remote';
-import { orderErrorText, placeOrder, quoteOrder, saveProfile } from '../sync';
+import { checkGiftCard, orderErrorText, placeOrder, quoteOrder, saveProfile, type Wallet } from '../sync';
 import { go } from '../router';
 import type { CartLine, Order, PayMethod, Product, SavedAddress, User } from '../types';
+import { tr, useT } from '../i18n';
 
-type ShipM = 'standard' | 'express' | 'pickup';
+type ShipM = 'standard' | 'express' | 'pickup' | 'digital';
+const NO_WALLET: Wallet | null = null;
+const NO_COSTS: Record<string, number> = {};
 
 const PAY_INFO: Record<PayMethod, { title: string; sub: string }> = {
   bank: { title: 'Bank transfer / LankaQR', sub: 'Scan a LankaQR code or pay into our account, then upload your receipt or send it on WhatsApp. We approve it and start pouring.' },
@@ -22,6 +25,7 @@ const PAY_INFO: Record<PayMethod, { title: string; sub: string }> = {
 };
 
 export function Checkout() {
+  const t = useT();
   const { cart, user, disc, discObj, settings: st, clearCart, flash } = useApp();
   const users = useStored<User[]>('users', EMPTY);
   const me = useMemo(() => (user ? users.find((u) => u.id === user.id) : undefined), [user, users]);
@@ -43,7 +47,16 @@ export function Checkout() {
   useEffect(() => { patch({ ...saved, email: user?.email ?? '' }); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [savedKey]);
   const [step, setStep] = useState(1);
   const [err, setErr] = useState('');
-  const [shipM, setShipM] = useState<ShipM>('standard');
+  const [shipChoice, setShipM] = useState<ShipM>('standard');
+  const digital = cart.length > 0 && cart.every((l) => l.kind === 'giftcard');
+  const shipM: ShipM = digital ? 'digital' : shipChoice === 'digital' ? 'standard' : shipChoice;
+  const wallet = useStored<Wallet | null>('wallet', NO_WALLET);
+  const costs = useStored<Record<string, number>>('costs', NO_COSTS);
+  const [gcInput, setGcInput] = useState('');
+  const [gcCode, setGcCode] = useState('');
+  const [gcMsg, setGcMsg] = useState('');
+  const [useCredit, setUseCredit] = useState(false);
+  const refCode = remote ? (() => { try { return localStorage.getItem('ee_ref') ?? ''; } catch { return ''; } })() : '';
   const [wrap, setWrap] = useState(false);
   const [payMethod, setPayMethod] = useState<PayMethod>('bank');
   const [bankId, setBankId] = useState('');
@@ -58,23 +71,26 @@ export function Checkout() {
   const district = str('district');
 
   // online baskets must carry the customer's choices so the server can price them
-  const stale = remote && cart.some((l) => !l.box && !l.sel);
+  const stale = remote && cart.some((l) => !l.box && !l.sel && l.kind !== 'giftcard');
   useEffect(() => {
     if (!stale) return;
-    set('cart', get<CartLine[]>('cart', []).filter((l) => l.box || l.sel));
+    set('cart', get<CartLine[]>('cart', []).filter((l) => l.box || l.sel || l.kind === 'giftcard'));
     flash('Some older items were removed from your basket. Please add them again.');
   }, [stale, flash]);
 
   const local = computeTotals(cart, discObj, st, shipM, wrap, district);
   const stdFree = computeTotals(cart, discObj, st, 'standard', false, district).ship === 0;
   const T: Totals = quote ? { ...local, sub: quote.sub, disc: quote.disc, ship: quote.ship, wrap: quote.wrap, total: quote.total } : local;
-  const steps = ['1 Your details', '2 Delivery', '3 Payment'];
+  const due = quote ? quote.due ?? quote.total : T.total;
+  const free = remote && !!quote && due === 0;
+  const steps = ['1 ' + t('Your details'), '2 ' + t('Delivery'), '3 ' + t('Payment')];
 
   const payload = () => ({
     email: str('email').trim(), name: (str('first') + ' ' + str('last')).trim(), first: str('first').trim(), phone: str('phone').trim(),
-    address: shipM === 'pickup' ? { a1: '', a2: '', city: '', district: '', post: '' } : { a1: str('a1').trim(), a2: str('a2').trim(), city: str('city').trim(), district: str('district'), post: str('post').trim() },
-    items: cart.map((l) => (l.box ? { pid: 0, qty: l.qty, box: l.box, boxId: l.boxId, note: l.note } : { pid: l.pid, qty: l.qty, sel: l.sel })),
-    code: disc, shipM, wrap, payMethod: pay, payBank: pay === 'bank' ? bank?.bank : undefined, note: str('gnote').trim(), sellerNote: str('snote').trim(),
+    address: shipM === 'pickup' || shipM === 'digital' ? { a1: '', a2: '', city: '', district: '', post: '' } : { a1: str('a1').trim(), a2: str('a2').trim(), city: str('city').trim(), district: str('district'), post: str('post').trim() },
+    items: cart.map((l) => (l.kind === 'giftcard' ? { kind: 'giftcard', qty: 1, amount: l.unit, to: l.gc?.to, from: l.gc?.from, msg: l.gc?.msg } : l.box ? { pid: 0, qty: l.qty, box: l.box, boxId: l.boxId, note: l.note } : { pid: l.pid, qty: l.qty, sel: l.sel })),
+    giftCode: gcCode, useCredit: useCredit && !!user, refCode,
+    code: disc, shipM, wrap: digital ? false : wrap, payMethod: pay || 'bank', payBank: pay === 'bank' ? bank?.bank : undefined, note: str('gnote').trim(), sellerNote: str('snote').trim(),
   });
 
   // the server's own totals for step 3 (and whenever the choices that affect price change)
@@ -85,7 +101,7 @@ export function Checkout() {
     quoteOrder(payload()).then((q) => { if (live) { setQuote(q); setErr(''); } }).catch((e) => { if (live) setErr(orderErrorText(e)); });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, shipM, wrap, pay, disc, cart, district, bankId]);
+  }, [step, shipM, wrap, pay, disc, cart, district, bankId, gcCode, useCredit]);
 
   const field = (name: string, label: string, o: { type?: string; ph?: string; span?: 1 | 2 } = {}) => <Field key={name} label={label} {...bind(name)} type={o.type} placeholder={o.ph} span={o.span} />;
 
@@ -98,12 +114,12 @@ export function Checkout() {
       setErr(''); return setStep(2);
     }
     if (step === 2) {
-      if (shipM !== 'pickup') {
-        for (const [k, n] of [['a1', 'address'], ['city', 'town or city'], ['district', 'district']] as const) if (!str(k).trim()) return setErr('Enter your ' + n + '.');
+      if (shipM !== 'pickup' && shipM !== 'digital') {
+        for (const [k, msg] of [['a1', 'Enter your address.'], ['city', 'Enter your town or city.'], ['district', 'Enter your district.']] as const) if (!str(k).trim()) return setErr(msg);
       }
       setErr(''); return setStep(3);
     }
-    if (!pay) return setErr('We cannot take payment online just yet. Please contact us' + (st.whatsapp ? ' on WhatsApp' : '') + ' to place your order.');
+    if (!pay && !free) return setErr('We cannot take payment online just yet. Please contact us' + (st.whatsapp ? ' on WhatsApp' : '') + ' to place your order.');
 
     let order: Order;
     setBusy(true);
@@ -121,7 +137,7 @@ export function Checkout() {
       const iso = new Date().toISOString(), p = payload();
       order = {
         id: 'EE-' + nextNum, date: iso, email: p.email, name: p.name, first: p.first, phone: p.phone, address: p.address,
-        items: cart.map((l) => ({ name: l.name, sub: l.sub, qty: l.qty, unit: l.unit, tint: l.tint, pid: l.pid, ...(l.sel ? { sel: l.sel } : {}), ...(l.note ? { note: l.note } : {}), ...(l.box ? { box: l.box.map((c) => ({ pid: c.pid, name: get<Product[]>('products', []).find((x) => x.id === c.pid)?.name ?? '' })) } : {}) })),
+        items: cart.map((l) => ({ name: l.name, sub: l.sub, qty: l.qty, unit: l.unit, tint: l.tint, pid: l.pid, cost: l.box ? l.box.reduce((a, c) => a + (costs[String(c.pid)] ?? 0), 0) : costs[String(l.pid)] ?? 0, ...(l.sel ? { sel: l.sel } : {}), ...(l.note ? { note: l.note } : {}), ...(l.box ? { box: l.box.map((c) => ({ pid: c.pid, name: get<Product[]>('products', []).find((x) => x.id === c.pid)?.name ?? '' })) } : {}) })),
         sub: T.sub, disc: T.disc, code: disc, ship: T.ship, shipM, wrap: T.wrap, total: T.total, status: 'Processing',
         pay: PAY_INFO[pay].title, payMethod: pay, payBank: pay === 'bank' ? bank?.bank ?? null : null, payStatus: 'Pending', note: p.note, sellerNote: p.sellerNote, userId: user ? user.id : null, log: [{ s: 'Placed', d: iso }],
       };
@@ -136,7 +152,7 @@ export function Checkout() {
       set('orders', orders.concat(order));
     }
     setBusy(false);
-    if (user && shipM !== 'pickup' && chosen === 'new' && saveNew && str('a1').trim()) {
+    if (user && shipM !== 'pickup' && shipM !== 'digital' && chosen === 'new' && saveNew && str('a1').trim()) {
       const entry: SavedAddress = { id: 'a' + Date.now().toString(36), label: addrLabel.trim() || (book.length ? 'Address ' + (book.length + 1) : 'Home'), name: (str('first') + ' ' + str('last')).trim(), phone: str('phone').trim(), a1: str('a1').trim(), a2: str('a2').trim(), city: str('city').trim(), district: str('district'), post: str('post').trim(), isDefault: book.length === 0 };
       const next = book.concat(entry);
       if (remote) void saveProfile({ addresses: next, phone: me?.phone || str('phone').trim() });
@@ -149,14 +165,22 @@ export function Checkout() {
 
   const back = () => { setErr(''); setStep(Math.max(1, step - 1)); };
   const addr = [str('a1'), str('city'), district].filter(Boolean).join(', ');
+  const applyGift = async () => {
+    const c = gcInput.trim().toUpperCase();
+    if (!c) return;
+    const r = await checkGiftCard(c);
+    if (r === 'busy') return setGcMsg('Too many tries. Please wait a few minutes.');
+    if (!r) return setGcMsg('That code is not valid, or it has no balance left.');
+    setGcCode(c); setGcMsg(tr('Gift card applied. Balance {amount}.', { amount: money(r.balance) })); setGcInput('');
+  };
 
   return (
     <section className="page">
-      <h1 className="h1" style={{ marginBottom: 16 }}>Checkout</h1>
+      <h1 className="h1" style={{ marginBottom: 16 }}>{t('Checkout')}</h1>
       {cart.length === 0 ? (
         <div className="card stack" style={{ textAlign: 'center', alignItems: 'center', gap: 12 }}>
-          <div style={{ fontSize: 18, fontWeight: 500 }}>Your basket is empty.</div>
-          <a href="#/shop" className="btn">Start Shopping</a>
+          <div style={{ fontSize: 18, fontWeight: 500 }}>{t('Your basket is empty.')}</div>
+          <a href="/shop" className="btn">{t('Start Shopping')}</a>
         </div>
       ) : !user && !guest ? (
         <CheckoutGate onGuest={() => { try { sessionStorage.setItem('ee_guest', '1'); } catch { /* ignore */ } setGuest(true); }} />
@@ -172,8 +196,8 @@ export function Checkout() {
               {step === 1 && (
                 <div className="card stack" style={{ gap: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                    <div className="h3">Your details</div>
-                    {user ? <span className="muted">Signed in as {user.email}</span> : <span className="muted">Checking out as a guest · <a href="#/login?next=checkout">Sign in instead</a></span>}
+                    <div className="h3">{t('Your details')}</div>
+                    {user ? <span className="muted">{t('Signed in as')}{' '}{user.email}</span> : <span className="muted">{t('Checking out as a guest ·')}{' '}<a href="/login?next=checkout">{t('Sign in instead')}</a></span>}
                   </div>
                   <div className="fields two">
                     {field('email', 'Email', { type: 'email', ph: 'you@example.com', span: 2 })}
@@ -181,35 +205,46 @@ export function Checkout() {
                     {field('last', 'Last name')}
                     {field('phone', 'Phone / WhatsApp number', { type: 'tel', ph: '077 123 4567', span: 2 })}
                   </div>
-                  <Field label="Note for the seller (optional)" {...bind('snote')} rows={3} placeholder="Colour matching, delivery instructions, anything we should know" />
-                  <Field label="Gift message (optional)" {...bind('gnote')} rows={2} placeholder="Added to the packing slip" />
+                  <Field label={t('Note for the seller (optional)')} {...bind('snote')} rows={3} placeholder={t('Colour matching, delivery instructions, anything we should know')} />
+                  <Field label={t('Gift message (optional)')} {...bind('gnote')} rows={2} placeholder={t('Added to the packing slip')} />
                   <ErrorText>{err}</ErrorText>
                   <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                    <a href="#/cart" className="btn ghost">Back to Basket</a>
-                    <button type="button" className="btn" onClick={next}>Continue to Delivery</button>
+                    <a href="/cart" className="btn ghost">{t('Back to Basket')}</a>
+                    <button type="button" className="btn" onClick={next}>{t('Continue to Delivery')}</button>
                   </div>
                 </div>
               )}
 
-              {step === 2 && (
+              {step === 2 && digital && (
                 <div className="card stack" style={{ gap: 16 }}>
-                  <div className="h3">Delivery</div>
-                  {([['standard', 'Standard delivery', '3 to 5 working days', stdFree ? 'Free' : money(computeTotals(cart, discObj, st, 'standard', false, district).ship)], ['express', 'Express delivery', 'Next working day (Colombo area and main cities)', money(st.express)], ...(pickupOn ? [['pickup', 'Store pickup', st.pickupAddress, 'Free']] : [])] as [ShipM, string, string, string][]).map(([id, label, eta, price]) => (
-                    <OptionRow key={id} on={shipM === id} onClick={() => setShipM(id)} title={label} sub={eta} price={price} />
+                  <div className="h3">{t('Delivery')}</div>
+                  <div className="notice-soft"><div><b>{t('Nothing to post.')}</b>{' '}{t('Your gift card code appears on your order page as soon as we approve your payment, ready to pass on.')}</div></div>
+                  <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                    <button type="button" className="btn ghost" onClick={back}>{t('Back')}</button>
+                    <button type="button" className="btn" onClick={next}>{t('Continue to Payment')}</button>
+                  </div>
+                </div>
+              )}
+
+              {step === 2 && !digital && (
+                <div className="card stack" style={{ gap: 16 }}>
+                  <div className="h3">{t('Delivery')}</div>
+                  {([['standard', 'Standard delivery', '3 to 5 working days', stdFree ? t('Free') : money(computeTotals(cart, discObj, st, 'standard', false, district).ship)], ['express', 'Express delivery', 'Next working day (Colombo area and main cities)', money(st.express)], ...(pickupOn ? [['pickup', 'Store pickup', st.pickupAddress, t('Free')]] : [])] as [ShipM, string, string, string][]).map(([id, label, eta, price]) => (
+                    <OptionRow key={id} on={shipM === id} onClick={() => setShipM(id)} title={t(label)} sub={t(eta)} price={price} />
                   ))}
                   {shipM !== 'pickup' && book.length > 0 && (
                     <div className="stack" style={{ gap: 8 }}>
-                      <div className="label-s" style={{ margin: 0 }}>Deliver to</div>
-                      <div className="addr-pick" role="radiogroup" aria-label="Saved addresses">
+                      <div className="label-s" style={{ margin: 0 }}>{t('Deliver to')}</div>
+                      <div className="addr-pick" role="radiogroup" aria-label={t('Saved addresses')}>
                         {book.map((a) => (
                           <button key={a.id} type="button" role="radio" aria-checked={chosen === a.id} className={'addr-card' + (chosen === a.id ? ' on' : '')} onClick={() => useAddress(a)}>
-                            <b>{a.label || 'Address'}</b>{a.isDefault && <span className="tagpill" style={{ marginLeft: 8 }}>Default</span>}
+                            <b>{a.label || t('Address')}</b>{a.isDefault && <span className="tagpill" style={{ marginLeft: 8 }}>{t('Default')}</span>}
                             <span>{a.name}{a.phone ? ' · ' + a.phone : ''}</span>
                             <span>{[a.a1, a.a2, a.city, a.district].filter(Boolean).join(', ')}</span>
                           </button>
                         ))}
                         <button type="button" role="radio" aria-checked={chosen === 'new'} className={'addr-card new' + (chosen === 'new' ? ' on' : '')} onClick={() => useAddress(null)}>
-                          <b>+ Use a different address</b>
+                          <b>{t('+ Use a different address')}</b>
                         </button>
                       </div>
                     </div>
@@ -219,9 +254,9 @@ export function Checkout() {
                       {field('a1', 'Address', { span: 2 })}
                       {field('a2', 'Apartment, landmark (optional)', { span: 2 })}
                       {field('city', 'Town or city')}
-                      <label className="field">District
+                      <label className="field">{t('District')}
                         <select className="input" name="district" value={district} onChange={(e) => patch({ district: e.target.value })}>
-                          <option value="">Select district</option>
+                          <option value="">{t('Select district')}</option>
                           {SL_DISTRICTS.map((d) => <option key={d} value={d}>{d}</option>)}
                         </select>
                       </label>
@@ -229,65 +264,95 @@ export function Checkout() {
                       {user && (
                         <div className="span2 stack" style={{ gap: 8 }}>
                           <label style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 14, cursor: 'pointer' }}>
-                            <input type="checkbox" checked={saveNew} onChange={(e) => setSaveNew(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#8F6642' }} /> Save this address to my account
+                            <input type="checkbox" checked={saveNew} onChange={(e) => setSaveNew(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#8F6642' }} />{' '}{t('Save this address to my account')}
                           </label>
-                          {saveNew && <input className="input" aria-label="Address label" placeholder="Label, e.g. Home, Work (optional)" value={addrLabel} onChange={(e) => setAddrLabel(e.target.value)} />}
+                          {saveNew && <input className="input" aria-label={t('Address label')} placeholder={t('Label, e.g. Home, Work (optional)')} value={addrLabel} onChange={(e) => setAddrLabel(e.target.value)} />}
                         </div>
                       )}
                     </div>
                   )}
-                  <OptionRow on={wrap} onClick={() => setWrap(!wrap)} title="Gift wrap" sub="Kraft box, ribbon and message card" price={money(st.giftWrap)} />
+                  <OptionRow on={wrap} onClick={() => setWrap(!wrap)} title={t('Gift wrap')} sub={t('Kraft box, ribbon and message card')} price={money(st.giftWrap)} />
                   <ErrorText>{err}</ErrorText>
                   <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                    <button type="button" className="btn ghost" onClick={back}>Back</button>
-                    <button type="button" className="btn" onClick={next}>Continue to Payment</button>
+                    <button type="button" className="btn ghost" onClick={back}>{t('Back')}</button>
+                    <button type="button" className="btn" onClick={next}>{t('Continue to Payment')}</button>
                   </div>
                 </div>
               )}
 
               {step === 3 && (
                 <div className="card stack" style={{ gap: 16 }}>
-                  <div className="h3">Payment</div>
+                  <div className="h3">{t('Payment')}</div>
                   <div style={{ fontSize: 14, color: 'var(--text2)' }}>
-                    {shipM === 'pickup' ? <>Collect from: {st.pickupAddress}</> : <>Deliver to: {addr}</>} <button type="button" className="link-btn" onClick={() => setStep(2)}>Edit</button>
+                    {shipM === 'digital' ? <>{t('Delivered as a code on your order page.')}</> : shipM === 'pickup' ? <>{t('Collect from:')}{' '}{st.pickupAddress}</> : <>{t('Deliver to:')}{' '}{addr}</>} <button type="button" className="link-btn" onClick={() => setStep(2)}>{t('Edit')}</button>
                   </div>
-                  {methods.length === 0 && (
-                    <div className="notice-warn">
-                      Online payment is not set up yet, so this order cannot be placed.{' '}
-                      {st.whatsapp ? <a href={'https://wa.me/' + st.whatsapp} target="_blank" rel="noreferrer">Message us on WhatsApp</a> : <>Please contact us.</>}
+                  {remote && (
+                    <div className="stack" style={{ gap: 10 }}>
+                      {user && (wallet?.credit ?? 0) > 0 && !digital && (
+                        <label style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 14, cursor: 'pointer' }}>
+                          <input type="checkbox" checked={useCredit} onChange={(e) => setUseCredit(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#8F6642' }} />{' '}{t('Use my store credit ({amount} available)', { amount: money(wallet?.credit ?? 0) })}
+                        </label>
+                      )}
+                      {!digital && (gcCode ? (
+                        <div className="row-between" style={{ fontSize: 14 }}><span>{t('Gift card')}{' '}<b className="perk-code">{gcCode}</b>{' '}{t('applied')}</span><button type="button" className="link-btn" onClick={() => { setGcCode(''); setGcMsg(''); }}>{t('Remove')}</button></div>
+                      ) : (
+                        <div className="stack" style={{ gap: 6 }}>
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <input className="input" style={{ flex: '1 1 220px' }} value={gcInput} onChange={(e) => { setGcInput(e.target.value); setGcMsg(''); }} placeholder={t('Gift card code')} aria-label={t('Gift card code')} onKeyDown={(e) => { if (e.key === 'Enter') void applyGift(); }} />
+                            <button type="button" className="btn ghost" onClick={applyGift} disabled={!gcInput.trim()}>{t('Apply')}</button>
+                          </div>
+                        </div>
+                      ))}
+                      {gcMsg && <div className={gcCode ? 'ok' : 'muted'} style={{ fontSize: 13 }}>{gcMsg}</div>}
                     </div>
                   )}
-                  {methods.map((m) => <OptionRow key={m} on={pay === m} onClick={() => setPayMethod(m)} title={PAY_INFO[m].title} sub={PAY_INFO[m].sub} price="" />)}
-                  {pay === 'bank' && (
+                  {free && <div className="ok">{t('Nothing left to pay. Your gift card and credit cover this order.')}</div>}
+                  {methods.length === 0 && !free && (
+                    <div className="notice-warn">
+                      {t('Online payment is not set up yet, so this order cannot be placed.')}{' '}
+                      {st.whatsapp ? <a href={'https://wa.me/' + st.whatsapp} target="_blank" rel="noreferrer">{t('Message us on WhatsApp')}</a> : <>{t('Please contact us.')}</>}
+                    </div>
+                  )}
+                  {!free && methods.map((m) => <OptionRow key={m} on={pay === m} onClick={() => setPayMethod(m)} title={t(PAY_INFO[m].title)} sub={t(PAY_INFO[m].sub)} price="" />)}
+                  {pay === 'bank' && !free && (
                     <div className="stack" style={{ gap: 8 }}>
                       <BankAccounts accounts={st.banks} value={bank?.id} onChange={setBankId} />
-                      <div className="muted" style={{ fontSize: 13 }}>You will get your order number on the next page. Use it as the payment reference.</div>
+                      <div className="muted" style={{ fontSize: 13 }}>{t('You will get your order number on the next page. Use it as the payment reference.')}</div>
                     </div>
                   )}
                   <ErrorText>{err}</ErrorText>
                   <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                    <button type="button" className="btn ghost" onClick={back}>Back</button>
-                    <button type="button" className="btn" onClick={next} disabled={busy || !pay || (remote && !quote && !err)}>{busy ? 'Placing order…' : 'Place Order · ' + money(T.total)}</button>
+                    <button type="button" className="btn ghost" onClick={back}>{t('Back')}</button>
+                    <button type="button" className="btn" onClick={next} disabled={busy || (!pay && !free) || (remote && !quote && !err)}>{busy ? t('Placing order…') : t('Place Order') + ' · ' + money(due)}</button>
                   </div>
                 </div>
               )}
             </div>
 
             <aside className="card stack" style={{ gap: 12 }}>
-              <div className="h3">Order Summary</div>
+              <div className="h3">{t('Order Summary')}</div>
               {cart.map((l) => (
                 <div key={l.key} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <div style={{ width: 48, height: 48, borderRadius: 8, background: soft(l.tint), flex: 'none' }} />
+                  <div style={{ width: 48, height: 48, borderRadius: 8, background: soft(l.tint), ...(l.img ? { backgroundImage: 'url(' + l.img + ')', backgroundSize: 'cover', backgroundPosition: 'center' } : {}), flex: 'none' }} />
                   <div style={{ flex: 1, minWidth: 0, fontSize: 14 }}>
                     <div style={{ fontWeight: 500 }}>{l.name}</div>
-                    <div className="muted">{lineText(l)} · Qty {l.qty}</div>
+                    <div className="muted">{lineText(l)}{' '}{t('· Qty')}{' '}{l.qty}</div>
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{money(l.unit * l.qty)}</div>
                 </div>
               ))}
               <DiscountBox />
-              <Summary shipLabel={shipM === 'pickup' ? 'Store pickup' : 'Delivery'} totals={T} />
-              {remote && step === 3 && quote && <div className="muted" style={{ fontSize: 12 }}>Prices confirmed by our server.</div>}
+              <Summary shipLabel={shipM === 'pickup' ? 'Store pickup' : 'Delivery'} totals={T}
+                before={!!quote?.refDisc && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: 'var(--green)' }}><span>{'Friend discount (included)'}</span><span>-{money(quote.refDisc)}</span></div>}
+                after={quote && (!!quote.gcApplied || !!quote.creditApplied) && (
+                  <>
+                    {!!quote.gcApplied && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: 'var(--green)' }}><span>{'Gift card'}</span><span>-{money(quote.gcApplied)}</span></div>}
+                    {!!quote.creditApplied && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: 'var(--green)' }}><span>{'Store credit'}</span><span>-{money(quote.creditApplied)}</span></div>}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 700 }}><span>{'To pay'}</span><span>{money(due)}</span></div>
+                  </>
+                )} />
+              {remote && refCode && st.referralFriend > 0 && step < 3 && <div className="muted" style={{ fontSize: 13 }}>{t('A friend invited you: {amount} off your first order is applied at the last step.', { amount: money(st.referralFriend) })}</div>}
+              {remote && step === 3 && quote && <div className="muted" style={{ fontSize: 12 }}>{t('Prices confirmed by our server.')}</div>}
             </aside>
           </div>
         </>
@@ -297,9 +362,10 @@ export function Checkout() {
 }
 
 function OptionRow({ on, onClick, title, sub, price }: { on: boolean; onClick: () => void; title: string; sub: string; price: string }) {
+  const t = useT();
   return (
     <button type="button" onClick={onClick} aria-pressed={on} style={{ textAlign: 'left', font: '500 16px Inter', padding: 16, borderRadius: 8, cursor: 'pointer', border: `1px solid ${on ? 'var(--brown)' : 'var(--sand)'}`, background: on ? 'var(--cream)' : '#fff', color: 'var(--ink)', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-      <span>{title}<br /><span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>{sub}</span></span>
+      <span>{t(title)}<br /><span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>{t(sub)}</span></span>
       <span>{price}</span>
     </button>
   );

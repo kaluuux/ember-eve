@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useApp } from '../AppContext';
 import { DEFAULT_COLORS } from '../store';
 import { Reveal } from './Flair';
+import { useT } from '../i18n';
 
 const lighten = (hex: string, k: number) => {
   const n = parseInt(hex.slice(1), 16);
@@ -11,6 +12,7 @@ const lighten = (hex: string, k: number) => {
 
 /** A candle that takes on whichever colours you pick: one colour, or a blend of up to three. */
 export function ColourStudio() {
+  const t = useT();
   const { colors, settings, categories } = useApp();
   const palette = colors.length ? colors : DEFAULT_COLORS;
   const [picked, setPicked] = useState<string[]>([palette[Math.min(7, palette.length - 1)].id]);
@@ -23,7 +25,7 @@ export function ColourStudio() {
     setPicked((p) => (p.includes(id) ? (p.length > 1 ? p.filter((x) => x !== id) : p) : p.length >= 3 ? [...p.slice(1), id] : [...p, id]));
   };
   const name = chosen.map((c) => c.name).join(' + ');
-  const href = '#/shop' + (categories[0] ? '?cat=' + categories[0].id : '');
+  const href = '/shop' + (categories[0] ? '?cat=' + categories[0].id : '');
 
   return (
     <section className="studio" aria-labelledby="studio-h">
@@ -47,7 +49,7 @@ export function ColourStudio() {
             <rect x="72" y="150" width="176" height="236" rx="32" fill="rgba(255,255,255,.28)" stroke="rgba(120,90,60,.35)" strokeWidth="2" />
             <rect x="86" y="170" width="8" height="170" rx="4" fill="rgba(255,255,255,.55)" />
             <rect x="106" y="262" width="108" height="64" rx="6" fill="#FBF8F3" stroke="rgba(143,102,66,.25)" />
-            <text x="160" y="289" textAnchor="middle" fontFamily="Cormorant Garamond, Georgia, serif" fontSize="22" fontWeight="600" fill="#2A2623">Ember &amp; Eve</text>
+            <text x="160" y="289" textAnchor="middle" fontFamily="Cormorant Garamond, Georgia, serif" fontSize="22" fontWeight="600" fill="#2A2623">{t('Ember & Eve')}</text>
             <text x="160" y="308" textAnchor="middle" fontFamily="Inter, sans-serif" fontSize="8.5" fontWeight="600" letterSpacing="1.8" fill="#8F6642">{(chosen.length > 1 ? 'CUSTOM BLEND' : first.name).toUpperCase()}</text>
             <line x1="160" y1="172" x2="160" y2="146" stroke="#2A2623" strokeWidth="3" strokeLinecap="round" />
             <circle cx="160" cy="128" r="46" fill="url(#studio-fg)" style={{ animation: 'glowPulse 3s ease-in-out infinite', transformBox: 'fill-box', transformOrigin: 'center' }} />
@@ -59,21 +61,21 @@ export function ColourStudio() {
         </Reveal>
 
         <Reveal delay={120}>
-          <span className="eyebrow">Colour studio</span>
-          <h2 id="studio-h" className="h2">Make it yours, one shade at a time</h2>
+          <span className="eyebrow">{t('Colour studio')}</span>
+          <h2 id="studio-h" className="h2">{t('Make it yours, one shade at a time')}</h2>
           <p className="lede" style={{ margin: '14px 0 22px' }}>
-            Choose from our palette, or blend two or three colours for a shade nobody else has. The first {settings.freeColors} colours in a blend are free.
+            {t('Choose from our palette, or blend two or three colours for a shade nobody else has. The first {n} colours in a blend are free.', { n: settings.freeColors })}
           </p>
           <div className="studio-name" aria-live="polite">{name}</div>
-          <div className="swatches" role="group" aria-label="Pick a colour" style={{ margin: '14px 0 20px' }}>
+          <div className="swatches" role="group" aria-label={t('Pick a colour')} style={{ margin: '14px 0 20px' }}>
             {palette.map((c) => (
               <button key={c.id} type="button" className={'swatch' + (picked.includes(c.id) ? ' on' : '')} style={{ background: c.hex }} aria-label={c.name} aria-pressed={picked.includes(c.id)} title={c.name} onClick={() => toggle(c.id)} />
             ))}
-            <button type="button" className={'swatch swatch-mix' + (mix ? ' on' : '')} aria-pressed={mix} onClick={() => { setMix(!mix); if (mix) setPicked((p) => [p[0]]); }}>{mix ? 'Blending: pick up to 3' : '+ Blend colours'}</button>
+            <button type="button" className={'swatch swatch-mix' + (mix ? ' on' : '')} aria-pressed={mix} onClick={() => { setMix(!mix); if (mix) setPicked((p) => [p[0]]); }}>{mix ? t('Blending: pick up to 3') : t('+ Blend colours')}</button>
           </div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <a href={href} className="btn">Shop &amp; customise</a>
-            <a href="#/finder" className="btn ghost">Help me choose</a>
+            <a href={href} className="btn">{t('Shop & customise')}</a>
+            <a href="/finder" className="btn ghost">{t('Help me choose')}</a>
           </div>
         </Reveal>
       </div>

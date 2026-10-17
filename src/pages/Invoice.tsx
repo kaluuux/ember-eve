@@ -35,7 +35,7 @@ export function Invoice({ route }: { route: Route }) {
         <div className="inv-paper" style={{ textAlign: 'center' }}>
           <h1 className="inv-title">Invoice not found</h1>
           <p>Open it from your order page, or sign in first.</p>
-          <a href="#/track" className="btn">Track an order</a>
+          <a href="/track" className="btn">Track an order</a>
         </div>
       </div>
     );
@@ -54,7 +54,7 @@ export function Invoice({ route }: { route: Route }) {
   return (
     <div className="inv-wrap">
       <div className="inv-bar no-print">
-        <a href={route.q.back ? '#/' + route.q.back : '#/order/' + o.id} className="btn ghost sm">← Back</a>
+        <a href={route.q.back ? '/' + route.q.back : '/order/' + o.id} className="btn ghost sm">← Back</a>
         <button type="button" className="btn sm" onClick={() => window.print()}>Print / Save as PDF</button>
       </div>
 
@@ -102,7 +102,11 @@ export function Invoice({ route }: { route: Route }) {
           {o.disc > 0 && <div><dt>Discount{o.code ? ' (' + o.code + ')' : ''}:</dt><dd>{rs(o.disc)}</dd></div>}
           <div><dt>{pickup ? 'Pickup' : 'Delivery Fee'}:</dt><dd>{o.ship === 0 ? 'Rs. 0' : rs(o.ship)}</dd></div>
           {o.wrap > 0 && <div><dt>Gift Wrap:</dt><dd>{rs(o.wrap)}</dd></div>}
-          <div className="grand"><dt>{paid ? 'TOTAL PAID' : 'TOTAL DUE'}:</dt><dd>{rs(o.total)}</dd></div>
+          {!!o.refDisc && <div><dt>Friend discount:</dt><dd>{rs(o.refDisc)}</dd></div>}
+          {(!!o.gcApplied || !!o.creditApplied) && <div><dt>Order total:</dt><dd>{rs(o.total)}</dd></div>}
+          {!!o.gcApplied && <div><dt>Gift card:</dt><dd>- {rs(o.gcApplied)}</dd></div>}
+          {!!o.creditApplied && <div><dt>Store credit:</dt><dd>- {rs(o.creditApplied)}</dd></div>}
+          <div className="grand"><dt>{paid ? 'TOTAL PAID' : 'TOTAL DUE'}:</dt><dd>{rs(o.due ?? o.total)}</dd></div>
         </dl>
 
         <div className="inv-pay">

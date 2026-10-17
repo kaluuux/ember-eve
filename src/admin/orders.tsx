@@ -2,13 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { EMPTY, fmtDate, get, money, set, useStored, withDefaults, DEFAULT_SETTINGS } from '../store';
 import { go } from '../router';
 import { remote } from '../remote';
-import { receiptLinks } from '../sync';
+import { receiptLinks, useRole } from '../sync';
+import { NO_COSTS, cashOf, profitOf, type Costs } from '../profit';
 import { lineText, orderView } from '../commerce';
 import { PageHead, PayBadge, StatusBadge, downloadCsv, payOf, waLink } from './ui';
 import type { Order, OrderStatus, Product, Settings } from '../types';
 
 type Flash = (m: string) => void;
 const STATUS_FILTERS = ['All', 'Processing', 'Dispatched', 'Delivered', 'Cancelled'] as const;
+/** Quick views on top of the status filter */
+type Quick = '' | 'topack' | 'cancel';
 type PayFilter = 'all' | 'review' | 'waiting' | 'paid';
 const PAY_FILTERS: [PayFilter, string][] = [['all', 'Any payment'], ['review', 'Receipt to check'], ['waiting', 'Awaiting payment'], ['paid', 'Paid']];
 const COURIERS = ['Domex', 'Pronto', 'Koombiyo', 'Prompt Xpress', 'Speed Express', 'Sri Lanka Post', 'Other'];
@@ -21,16 +24,43 @@ export function OrdersView({ sel, pay, status, flash }: { sel: string; pay: stri
   const [fil, setFil] = useState<string>(STATUS_FILTERS.includes(status as never) ? status : 'All');
   const [payFil, setPayFil] = useState<PayFilter>(PAY_FILTERS.some(([k]) => k === pay) ? (pay as PayFilter) : 'all');
   const [search, setSearch] = useState('');
+  const [quick, setQuick] = useState<Quick>('');
+  const [picked, setPicked] = useState<string[]>([]);
+  const role = useRole();
+  const staff = remote && role === 'staff';
   useEffect(() => { if (status) setFil(status); if (pay) setPayFil(pay as PayFilter); }, [status, pay]);
 
   const q = search.toLowerCase();
   const rows = useMemo(
-    () => orders.slice().sort((a, b) => b.date.localeCompare(a.date)).filter((o) => (fil === 'All' || o.status === fil) && matchPay(o, payFil) && (!q || (o.id + o.name + o.email + o.phone).toLowerCase().includes(q))),
-    [orders, fil, payFil, q],
+    () => orders.slice().sort((a, b) => b.date.localeCompare(a.date)).filter((o) => (fil === 'All' || o.status === fil) && matchPay(o, payFil) && (!quick || (quick === 'topack' ? o.status === 'Processing' && payOf(o) === 'Paid' && !o.packed && o.shipM !== 'digital' : o.cancelRequest?.state === 'pending' && o.status !== 'Cancelled')) && (!q || (o.id + o.name + o.email + o.phone).toLowerCase().includes(q))),
+    [orders, fil, payFil, q, quick],
   );
   const count = (f: string) => orders.filter((o) => f === 'All' || o.status === f).length;
   const payCount = (f: PayFilter) => orders.filter((o) => o.status !== 'Cancelled' && matchPay(o, f)).length;
   const selO = orders.find((o) => o.id === sel);
+  const toPack = orders.filter((o) => o.status === 'Processing' && payOf(o) === 'Paid' && !o.packed && o.shipM !== 'digital').length;
+  const cancelAsks = orders.filter((o) => o.cancelRequest?.state === 'pending' && o.status !== 'Cancelled').length;
+  const pickedOrders = orders.filter((o) => picked.includes(o.id));
+  const allPicked = rows.length > 0 && rows.every((o) => picked.includes(o.id));
+  const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.concat(id)));
+
+  /** Move many orders on in one go. Unpaid orders are not dispatched; cancelled and finished ones are left alone. */
+  const bulk = (st: 'Dispatched' | 'Delivered' | 'packed') => {
+    let done = 0, skipped = 0;
+    const list = get<Order[]>('orders', []).map((x) => {
+      if (!picked.includes(x.id)) return x;
+      const n = JSON.parse(JSON.stringify(x)) as Order;
+      if (st === 'packed') { if (x.status === 'Processing' || x.status === 'Dispatched') { n.packed = true; done++; } else skipped++; return n; }
+      const ok = st === 'Dispatched' ? x.status === 'Processing' && payOf(x) === 'Paid' : (x.status === 'Dispatched' || x.status === 'Processing') && payOf(x) === 'Paid';
+      if (!ok) { skipped++; return x; }
+      n.status = st; n.log = (n.log || []).concat({ s: st, d: new Date().toISOString() }); done++;
+      return n;
+    });
+    set('orders', list);
+    flash(done + ' order' + (done === 1 ? '' : 's') + ' updated' + (skipped ? ', ' + skipped + ' skipped (unpaid or already past that step)' : ''));
+    setPicked([]);
+  };
+  const printLabels = () => window.open('/labels?ids=' + picked.join(','), '_blank');
 
   const exportCsv = () => {
     const head = ['Order', 'Date', 'Status', 'Payment status', 'Payment method', 'Paid to bank', 'Customer', 'Email', 'Phone', 'Delivery', 'Address', 'District', 'Items', 'Subtotal', 'Discount', 'Code', 'Delivery fee', 'Gift wrap', 'Total', 'Courier', 'Tracking', 'Customer note', 'Gift message'];
@@ -40,27 +70,41 @@ export function OrdersView({ sel, pay, status, flash }: { sel: string; pay: stri
 
   return (
     <>
-      <PageHead title="Orders" sub={rows.length + ' of ' + orders.length + ' orders shown'} actions={<button type="button" className="btn ghost sm" onClick={exportCsv}>Export CSV</button>} />
+      <PageHead title="Orders" sub={rows.length + ' of ' + orders.length + ' orders shown'} actions={!staff && <button type="button" className="btn ghost sm" onClick={exportCsv}>Export CSV</button>} />
       <div className="filters">
         {STATUS_FILTERS.map((c) => <button key={c} type="button" className={'chip' + (fil === c ? ' on' : '')} onClick={() => setFil(c)}>{c}<small>{count(c)}</small></button>)}
         <span className="sep" />
-        {PAY_FILTERS.map(([k, l]) => <button key={k} type="button" className={'chip' + (payFil === k ? ' on' : '')} onClick={() => setPayFil(k)}>{l}{k !== 'all' && <small>{payCount(k)}</small>}</button>)}
+        {!staff && PAY_FILTERS.map(([k, l]) => <button key={k} type="button" className={'chip' + (payFil === k ? ' on' : '')} onClick={() => setPayFil(k)}>{l}{k !== 'all' && <small>{payCount(k)}</small>}</button>)}
+        <button type="button" className={'chip' + (quick === 'topack' ? ' on' : '')} onClick={() => setQuick(quick === 'topack' ? '' : 'topack')}>To pack<small>{toPack}</small></button>
+        {cancelAsks > 0 && <button type="button" className={'chip' + (quick === 'cancel' ? ' on' : '')} onClick={() => setQuick(quick === 'cancel' ? '' : 'cancel')}>Cancel requests<small>{cancelAsks}</small></button>}
         <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search order, name, email, phone" aria-label="Search orders" style={{ width: 280, marginLeft: 'auto' }} />
       </div>
+
+      {picked.length > 0 && (
+        <div className="bulkbar" role="region" aria-label="Bulk actions">
+          <b>{picked.length} selected</b>
+          <button type="button" className="btn-xs" onClick={() => bulk('packed')}>Mark packed</button>
+          <button type="button" className="btn-xs" onClick={() => bulk('Dispatched')}>Mark dispatched</button>
+          <button type="button" className="btn-xs" onClick={() => bulk('Delivered')}>Mark delivered</button>
+          <button type="button" className="btn-xs" onClick={printLabels}>Print {pickedOrders.filter((o) => o.shipM !== 'pickup' && o.shipM !== 'digital').length} labels</button>
+          <button type="button" className="btn-xs" onClick={() => setPicked([])}>Clear</button>
+        </div>
+      )}
 
       <div className={'orders-layout' + (selO ? ' open' : '')}>
         <div className="card flush" style={{ overflowX: 'auto' }}>
           <table className="table">
-            <thead><tr><th>Order</th><th>Date</th><th>Customer</th><th style={{ textAlign: 'right' }}>Total</th><th>Payment</th><th>Status</th></tr></thead>
+            <thead><tr><th style={{ width: 34 }}><input type="checkbox" aria-label="Select all shown" checked={allPicked} onChange={() => setPicked(allPicked ? [] : rows.map((o) => o.id))} /></th><th>Order</th><th>Date</th><th>Customer</th>{!staff && <th style={{ textAlign: 'right' }}>Total</th>}{!staff && <th>Payment</th>}<th>Status</th></tr></thead>
             <tbody>
               {rows.map((o) => (
                 <tr key={o.id} className={'click' + (sel === o.id ? ' sel' : '')} onClick={() => go('admin/orders?sel=' + o.id)}>
-                  <td style={{ fontWeight: 600 }}>{o.id}</td>
+                  <td onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={'Select ' + o.id} checked={picked.includes(o.id)} onChange={() => toggle(o.id)} /></td>
+                  <td style={{ fontWeight: 600 }}>{o.id}{o.cancelRequest?.state === 'pending' && o.status !== 'Cancelled' && <span className="tag" style={{ marginLeft: 6, background: 'var(--a-bad-bg)', color: 'var(--a-bad)' }}>Wants to cancel</span>}</td>
                   <td>{fmtDate(o.date, { day: 'numeric', month: 'short' })}</td>
                   <td>{o.name}<div className="muted" style={{ fontSize: 12 }}>{o.phone || o.email}</div></td>
-                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(o.total)}</td>
-                  <td><PayBadge o={o} /></td>
-                  <td><StatusBadge status={o.status} /></td>
+                  {!staff && <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(cashOf(o))}</td>}
+                  {!staff && <td><PayBadge o={o} /></td>}
+                  <td><StatusBadge status={o.status} />{o.packed && o.status === 'Processing' && <span className="tag" style={{ marginLeft: 6, background: 'var(--a-info-bg)', color: 'var(--a-info)' }}>Packed</span>}</td>
                 </tr>
               ))}
             </tbody>
@@ -75,6 +119,9 @@ export function OrdersView({ sel, pay, status, flash }: { sel: string; pay: stri
 
 function OrderDetail({ o, settings, flash }: { o: Order; settings: Settings; flash: Flash }) {
   const v = orderView(o);
+  const role = useRole();
+  const staff = remote && role === 'staff';
+  const costs = useStored<Costs>('costs', NO_COSTS);
   const [links, setLinks] = useState<{ path: string; url: string }[]>([]);
   const [courier, setCourier] = useState(o.tracking?.courier || 'Domex');
   const [num, setNum] = useState(o.tracking?.number ?? '');
@@ -105,6 +152,9 @@ function OrderDetail({ o, settings, flash }: { o: Order; settings: Settings; fla
     }
     update((x) => { x.status = st; log(x, st); }, 'Order ' + o.id + ': ' + st);
   };
+  const packToggle = () => update((x) => { x.packed = !x.packed; }, o.packed ? 'Marked as not packed' : 'Marked as packed');
+  const approveCancel = () => { setStatus('Cancelled'); };
+  const declineCancel = () => update((x) => { if (x.cancelRequest) x.cancelRequest = { ...x.cancelRequest, state: 'declined' }; log(x, 'Cancellation request declined'); }, 'Request declined');
   const approve = () => update((x) => { x.payStatus = 'Paid'; log(x, 'Payment approved'); }, 'Payment approved for ' + o.id);
   const reject = () => update((x) => { x.payStatus = 'Failed'; log(x, 'Payment rejected'); }, 'Payment marked as rejected');
   const reopen = () => update((x) => { x.payStatus = 'Pending'; log(x, 'Payment reopened'); }, 'Payment reopened');
@@ -112,7 +162,8 @@ function OrderDetail({ o, settings, flash }: { o: Order; settings: Settings; fla
   const saveTracking = () => update((x) => { x.tracking = { courier, number: num.trim(), url: url.trim() }; log(x, 'Tracking added'); }, 'Tracking saved');
 
   const next = ({ Processing: 'Dispatched', Dispatched: 'Delivered' } as Partial<Record<OrderStatus, OrderStatus>>)[o.status];
-  const canCancel = o.status === 'Processing' || o.status === 'Dispatched';
+  const canCancel = !staff && (o.status === 'Processing' || o.status === 'Dispatched');
+  const pr = profitOf(o, costs);
   const pay = payOf(o);
   const hello = 'Hi ' + (o.first || o.name.split(' ')[0]) + ', this is ' + settings.shop + ' about your order ' + o.id + '. ';
 
@@ -125,23 +176,36 @@ function OrderDetail({ o, settings, flash }: { o: Order; settings: Settings; fla
         </div>
         <button type="button" className="btn-xs" onClick={() => go('admin/orders')}>Close</button>
       </div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><StatusBadge status={o.status} /><PayBadge o={o} /></div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><StatusBadge status={o.status} />{!staff && <PayBadge o={o} />}{o.packed && <span className="tag" style={{ background: 'var(--a-info-bg)', color: 'var(--a-info)' }}>Packed</span>}</div>
+
+      {o.cancelRequest?.state === 'pending' && o.status !== 'Cancelled' && (
+        <div className="notebox" style={{ background: 'var(--a-bad-bg)' }}>
+          <b>The customer asked to cancel this order</b>{o.cancelRequest.reason ? <><br />“{o.cancelRequest.reason}”</> : null}
+          {!staff ? (
+            <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+              <button type="button" className="btn sm danger" onClick={approveCancel}>Approve and cancel</button>
+              <button type="button" className="btn-xs" onClick={declineCancel}>Decline</button>
+            </div>
+          ) : <div className="muted" style={{ marginTop: 6 }}>Do not dispatch. The owner will decide.</div>}
+        </div>
+      )}
 
       <div className="block">
         <h4>Customer</h4>
-        <b>{o.name}</b><br />{o.email}<br />{o.phone}
+        <b>{o.name}</b><br />{!staff && <>{o.email}<br /></>}{o.phone}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
           {o.phone && <a className="btn-xs" href={waLink(o.phone, hello)} target="_blank" rel="noreferrer">WhatsApp customer</a>}
           {o.phone && <a className="btn-xs" href={'tel:' + o.phone}>Call</a>}
-          <a className="btn-xs" href={'#/invoice/' + o.id + '?back=admin/orders%3Fsel%3D' + o.id} target="_blank" rel="noreferrer">Invoice</a>
-          <a className="btn-xs" href={'mailto:' + o.email + '?subject=' + encodeURIComponent('Your order ' + o.id)}>Email</a>
+          {!staff && <a className="btn-xs" href={'/invoice/' + o.id + '?back=admin/orders%3Fsel%3D' + o.id} target="_blank" rel="noreferrer">Invoice</a>}
+          {!staff && <a className="btn-xs" href={'mailto:' + o.email + '?subject=' + encodeURIComponent('Your order ' + o.id)}>Email</a>}
         </div>
       </div>
 
       <div className="block">
         <h4>{o.shipM === 'pickup' ? 'Store pickup' : 'Deliver to'}</h4>
         {o.shipM === 'pickup' ? 'Customer collects from the store.' : <>{v.addr}{o.address.district ? ' (' + o.address.district + ' district)' : ''}</>}
-        <div className="muted" style={{ marginTop: 4 }}>{v.shipName} · {v.shipL}</div>
+        <div className="muted" style={{ marginTop: 4 }}>{v.shipName}{staff ? '' : ' · ' + v.shipL}</div>
+        {o.shipM !== 'pickup' && o.shipM !== 'digital' && <div style={{ marginTop: 8 }}><a className="btn-xs" href={'/labels?ids=' + o.id} target="_blank" rel="noreferrer">Print courier label</a></div>}
       </div>
 
       {(o.sellerNote || o.note) && (
@@ -151,7 +215,7 @@ function OrderDetail({ o, settings, flash }: { o: Order; settings: Settings; fla
         </div>
       )}
 
-      <div className="block">
+      {!staff && <div className="block">
         <h4>Payment · {o.pay}{o.payBank ? ' · ' + o.payBank : ''}</h4>
         {o.payMethod === 'bank' && (
           <>
@@ -168,11 +232,11 @@ function OrderDetail({ o, settings, flash }: { o: Order; settings: Settings; fla
           </>
         )}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {pay !== 'Paid' && <button type="button" className="btn sm" onClick={approve}>Approve payment · {money(o.total)}</button>}
+          {pay !== 'Paid' && <button type="button" className="btn sm" onClick={approve}>Approve payment · {money(cashOf(o))}</button>}
           {pay === 'Receipt sent' && <button type="button" className="btn sm ghost danger" onClick={reject}>Reject receipt</button>}
           {pay === 'Paid' && <button type="button" className="btn-xs" onClick={reopen}>Mark as unpaid</button>}
         </div>
-      </div>
+      </div>}
 
       <div className="block">
         <h4>Delivery tracking</h4>
@@ -184,29 +248,45 @@ function OrderDetail({ o, settings, flash }: { o: Order; settings: Settings; fla
         <div style={{ marginTop: 8 }}><button type="button" className="btn-xs" disabled={!num.trim()} onClick={saveTracking}>Save tracking</button></div>
       </div>
 
-      <div className="block">
+      {!staff && <div className="block">
         <h4>Internal note (only you can see this)</h4>
         <textarea className="input" rows={2} aria-label="Internal note" placeholder="e.g. regular customer, wrap extra carefully, called to confirm" value={note} onChange={(e) => setNote(e.target.value)} />
         <div style={{ marginTop: 8 }}><button type="button" className="btn-xs" disabled={note.trim() === (o.adminNote ?? '')} onClick={saveNote}>Save note</button></div>
-      </div>
+      </div>}
 
       <div className="block">
         <h4>Items</h4>
         {o.items.map((l, i) => (
           <div key={i} className="row-between" style={{ alignItems: 'flex-start', gap: 12, padding: '6px 0' }}>
             <span>{l.qty} × {l.name}<br /><span className="muted" style={{ fontSize: 12 }}>{lineText(l)}</span></span>
-            <span style={{ whiteSpace: 'nowrap' }}>{money(l.unit * l.qty)}</span>
+            {!staff && <span style={{ whiteSpace: 'nowrap' }}>{money(l.unit * l.qty)}</span>}
           </div>
         ))}
-        <div className="row-between" style={{ marginTop: 8 }}><span>Subtotal</span><span>{money(o.sub)}</span></div>
-        {o.disc > 0 && <div className="row-between" style={{ color: 'var(--a-good)' }}><span>Discount {o.code}</span><span>-{money(o.disc)}</span></div>}
-        <div className="row-between"><span>Delivery</span><span>{v.shipL}</span></div>
-        {o.wrap > 0 && <div className="row-between"><span>Gift wrap</span><span>{money(o.wrap)}</span></div>}
-        <div className="row-between" style={{ fontSize: 18, fontWeight: 700, marginTop: 6 }}><span>Total</span><span>{money(o.total)}</span></div>
+        {!staff && <>
+          <div className="row-between" style={{ marginTop: 8 }}><span>Subtotal</span><span>{money(o.sub)}</span></div>
+          {o.disc > 0 && <div className="row-between" style={{ color: 'var(--a-good)' }}><span>Discount {o.code}</span><span>-{money(o.disc)}</span></div>}
+          {!!o.refDisc && <div className="row-between" style={{ color: 'var(--a-good)' }}><span>Friend referral</span><span>-{money(o.refDisc)}</span></div>}
+          <div className="row-between"><span>Delivery</span><span>{v.shipL}</span></div>
+          {o.wrap > 0 && <div className="row-between"><span>Gift wrap</span><span>{money(o.wrap)}</span></div>}
+          <div className="row-between" style={{ fontSize: 18, fontWeight: 700, marginTop: 6 }}><span>Total</span><span>{money(o.total)}</span></div>
+          {!!o.gcApplied && <div className="row-between" style={{ color: 'var(--a-good)' }}><span>Gift card {o.gcCode}</span><span>-{money(o.gcApplied)}</span></div>}
+          {!!o.creditApplied && <div className="row-between" style={{ color: 'var(--a-good)' }}><span>Store credit</span><span>-{money(o.creditApplied)}</span></div>}
+          {(!!o.gcApplied || !!o.creditApplied) && <div className="row-between" style={{ fontWeight: 700 }}><span>To pay</span><span>{money(cashOf(o))}</span></div>}
+          <div className="row-between muted" style={{ marginTop: 8, fontSize: 13 }}><span>Profit on candles{pr.known ? '' : ' (some costs not set)'}</span><span>{money(pr.profit)}</span></div>
+        </>}
+        {!!o.giftCards?.length && !staff && <div className="notebox" style={{ background: 'var(--a-brand-soft)', marginTop: 8 }}><b>Gift cards issued</b>{o.giftCards.map((g) => <div key={g.code}>{g.code} · {money(g.amount)}{g.to ? ' for ' + g.to : ''}</div>)}</div>}
       </div>
 
+      {staff && o.shipM !== 'digital' && (
+        <div className="block" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" className="btn sm ghost" onClick={packToggle}>{o.packed ? 'Un-pack' : 'Mark packed'}</button>
+        </div>
+      )}
+
       <div className="block" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {next && <button type="button" className="btn sm" onClick={() => setStatus(next)}>Mark {next}</button>}
+        {!staff && o.shipM !== 'digital' && o.status === 'Processing' && <button type="button" className="btn sm ghost" onClick={packToggle}>{o.packed ? 'Un-pack' : 'Mark packed'}</button>}
+        {next && (!staff || pay === 'Paid') && <button type="button" className="btn sm" onClick={() => setStatus(next)}>Mark {next}</button>}
+        {staff && next && pay !== 'Paid' && <span className="muted">Not paid yet. Wait for the owner to approve payment.</span>}
         {canCancel && <button type="button" className="btn sm ghost danger" onClick={() => setStatus('Cancelled')}>Cancel order</button>}
       </div>
 

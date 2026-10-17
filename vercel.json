@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    { "source": "/sitemap.xml", "destination": "/api/sitemap" },
+    { "source": "/robots.txt", "destination": "/api/robots" },
+    { "source": "/((?!api/|assets/)(?!.*\.[A-Za-z0-9]{2,5}$).*)", "destination": "/api/page?p=$1" }
+  ],
+  "functions": { "api/page.js": { "includeFiles": "dist/index.html" } }
+}

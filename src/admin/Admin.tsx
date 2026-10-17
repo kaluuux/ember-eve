@@ -3,7 +3,7 @@ import './admin.css';
 import { Icon } from './ui';
 import { EMPTY, get, set, useStored } from '../store';
 import { remote } from '../remote';
-import { adminSignIn, adminSignOut, onSyncError, requestReset, useIsAdmin } from '../sync';
+import { adminSignIn, adminSignOut, onSyncError, requestReset, useIsAdmin, useRole } from '../sync';
 import { ErrorText, Field, useForm } from '../components/ui';
 import { go, type Route } from '../router';
 import type { Message, Order, Review } from '../types';
@@ -12,20 +12,23 @@ import { Dashboard } from './dashboard';
 import { OrdersView } from './orders';
 import { SettingsView } from './settings';
 import { CatalogView, ProductsView } from './catalog';
+import { ActivityView, AlertsView, GiftCardsView } from './owner';
 
 interface AdminSession { email: string }
 const NO_ADMIN: AdminSession | null = null;
 export const ADMIN_EMAIL = 'admin@emberandeve.example';
 
-const VIEWS = ['dash', 'orders', 'products', 'catalog', 'customers', 'discounts', 'reviews', 'messages', 'settings'] as const;
+const VIEWS = ['dash', 'orders', 'products', 'catalog', 'customers', 'discounts', 'giftcards', 'alerts', 'reviews', 'messages', 'activity', 'settings'] as const;
 type View = (typeof VIEWS)[number];
-const GROUPS: [string, View[]][] = [['Overview', ['dash', 'orders']], ['Shop', ['products', 'catalog', 'discounts']], ['People', ['customers', 'reviews', 'messages']], ['System', ['settings']]];
-const LABELS: Record<View, string> = { dash: 'Dashboard', orders: 'Orders', products: 'Products', catalog: 'Catalogue', customers: 'Customers', discounts: 'Discounts', reviews: 'Reviews', messages: 'Messages', settings: 'Settings' };
+const GROUPS: [string, View[]][] = [['Overview', ['dash', 'orders']], ['Shop', ['products', 'catalog', 'discounts', 'giftcards', 'alerts']], ['People', ['customers', 'reviews', 'messages']], ['System', ['activity', 'settings']]];
+const LABELS: Record<View, string> = { dash: 'Dashboard', orders: 'Orders', products: 'Products', catalog: 'Catalogue', customers: 'Customers', discounts: 'Discounts', giftcards: 'Gift cards', alerts: 'Back in stock', reviews: 'Reviews', messages: 'Messages', activity: 'Activity', settings: 'Settings' };
 
 export function Admin({ route }: { route: Route }) {
   const localAdmin = useStored<AdminSession | null>('admin', NO_ADMIN);
   const isAdmin = useIsAdmin();
+  const role = useRole();
   const admin: AdminSession | null = remote ? (isAdmin ? { email: 'Signed in' } : null) : localAdmin;
+  const staff = remote && role === 'staff';
   const orders = useStored<Order[]>('orders', EMPTY);
   const reviews = useStored<Review[]>('reviews', EMPTY);
   const msgs = useStored<Message[]>('messages', EMPTY);
@@ -36,11 +39,11 @@ export function Admin({ route }: { route: Route }) {
 
   if (!admin) return <AdminLogin />;
 
-  const view: View = (VIEWS as readonly string[]).includes(route.arg) ? (route.arg as View) : 'dash';
+  const view: View = staff ? 'orders' : (VIEWS as readonly string[]).includes(route.arg) ? (route.arg as View) : 'dash';
   const toCheck = orders.filter((o) => o.status !== 'Cancelled' && o.payStatus === 'Receipt sent').length;
   const toProcess = orders.filter((o) => o.status === 'Processing').length;
   const badge: Partial<Record<View, number>> = {
-    orders: toCheck || toProcess,
+    orders: (staff ? toProcess : toCheck || toProcess) + orders.filter((o) => o.cancelRequest?.state === 'pending' && o.status !== 'Cancelled').length,
     reviews: reviews.filter((r) => !r.approved).length,
     messages: msgs.filter((m) => !m.read).length,
   };
@@ -53,12 +56,12 @@ export function Admin({ route }: { route: Route }) {
           <div><b>Ember &amp; Eve</b><span>Shop admin</span></div>
         </div>
         <nav aria-label="Admin" style={{ display: 'contents' }}>
-          {GROUPS.map(([group, items]) => (
+          {(staff ? [['Packing', ['orders'] as View[]] as [string, View[]]] : GROUPS).map(([group, items]) => (
             <div key={group} style={{ display: 'contents' }}>
               <div className="admin-group">{group}</div>
               {items.map((v) => (
                 <button key={v} type="button" className={'admin-nav' + (view === v ? ' on' : '')} aria-current={view === v ? 'page' : undefined} onClick={() => go('admin/' + v)}>
-                  <Icon name={v} /><span className="nav-label">{LABELS[v]}</span>
+                  <Icon name={v} /><span className="nav-label">{staff ? 'Orders to pack' : LABELS[v]}</span>
                   {!!badge[v] && <span className="nav-count" aria-label={badge[v] + ' waiting'}>{badge[v]}</span>}
                 </button>
               ))}
@@ -66,8 +69,8 @@ export function Admin({ route }: { route: Route }) {
           ))}
         </nav>
         <div className="admin-foot">
-          <a href="#/">View store</a>
-          <div className="admin-user">{admin.email}</div>
+          <a href="/">View store</a>
+          <div className="admin-user">{admin.email}{staff ? ' · Staff' : ''}</div>
           <button type="button" className="admin-signout" onClick={() => (remote ? void adminSignOut() : set('admin', null))}>Sign out</button>
         </div>
       </aside>
@@ -79,6 +82,9 @@ export function Admin({ route }: { route: Route }) {
         {view === 'catalog' && <CatalogView flash={flash} />}
         {view === 'customers' && <Customers />}
         {view === 'discounts' && <Discounts flash={flash} />}
+        {view === 'giftcards' && <GiftCardsView flash={flash} />}
+        {view === 'alerts' && <AlertsView flash={flash} />}
+        {view === 'activity' && <ActivityView />}
         {view === 'reviews' && <ReviewsView />}
         {view === 'messages' && <Messages />}
         {view === 'settings' && <SettingsView flash={flash} />}
@@ -134,7 +140,7 @@ function AdminLogin() {
           Demo admin: admin@emberandeve.example / admin123{' '}
           <button type="button" className="link-btn" style={{ fontSize: 12, fontWeight: 600 }} onClick={() => { patch({ email: ADMIN_EMAIL, password: 'admin123' }); setErr(''); }}>Fill</button>
         </div>}
-        <a href="#/" style={{ fontSize: 12, textAlign: 'center' }}>Back to the store</a>
+        <a href="/" style={{ fontSize: 12, textAlign: 'center' }}>Back to the store</a>
       </form>
     </div>
   );

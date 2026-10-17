@@ -1,8 +1,11 @@
 import { useSyncExternalStore } from 'react';
+import { tr } from './i18n';
 import { sb, remote } from './remote';
 import { clearLocal, registerPush, setLocal, starterCatalog } from './store';
 import { go } from './router';
 import type { Address, Discount, Message, Order, Product, Review, SavedAddress, Session } from './types';
+
+export type Role = 'owner' | 'staff' | '';
 
 /**
  * Server sync (Supabase). Public data is loaded for everyone; admin edits are written through.
@@ -17,14 +20,18 @@ let admin = false;
 const ADM = 'ee-admin-state';
 const subAdmin = (cb: () => void) => { window.addEventListener(ADM, cb); return () => window.removeEventListener(ADM, cb); };
 export const useIsAdmin = () => useSyncExternalStore(subAdmin, () => admin);
+/** owner sees everything; staff can pack and dispatch but never sees money, customers or settings */
+let role: Role = '';
+export const useRole = () => useSyncExternalStore(subAdmin, () => role);
 
 export async function refreshAdmin(): Promise<void> {
   if (!sb) return;
   const { data } = await sb.auth.getSession();
-  let ok = false;
+  let ok = false, r: Role = '';
   if (data.session) ok = (await sb.rpc('is_admin')).data === true;
-  const changed = ok !== admin;
-  admin = ok;
+  if (ok) r = (await sb.rpc('my_role')).data === 'staff' ? 'staff' : 'owner';
+  const changed = ok !== admin || r !== role;
+  admin = ok; role = r;
   if (changed) window.dispatchEvent(new Event(ADM));
   if (ok) await hydrate();
 }
@@ -38,7 +45,7 @@ export async function adminSignIn(email: string, password: string): Promise<stri
 }
 export async function adminSignOut() {
   await sb?.auth.signOut();
-  admin = false;
+  admin = false; role = '';
   window.dispatchEvent(new Event(ADM));
 }
 
@@ -85,7 +92,14 @@ export async function hydrate(): Promise<void> {
       (sales.data ?? []).forEach((r: { pid: number; qty: number; last_30: number }) => { m[r.pid] = { all: r.qty, recent: r.last_30 }; });
       setLocal('sales', m);
     }
-    if (admin) {
+    if (admin && role === 'staff') {
+      const sd = await sb.rpc('staff_orders');
+      if (!sd.error) {
+        const list = ((sd.data as Partial<Order>[] | null) ?? []).map((o) => ({ sub: 0, disc: 0, code: '', ship: 0, wrap: 0, total: 0, email: '', userId: null, log: [], pay: '', payStatus: (o as { paid?: boolean }).paid ? 'Paid' : 'Pending', ...o }) as Order).reverse();
+        setLocal('orders', list);
+        last.orders = new Map(list.map((o) => [o.id, JSON.stringify(o)]));
+      }
+    } else if (admin) {
       const od = await sb.from('orders').select('id,data,status').order('created_at');
       if (!od.error) {
         const list = (od.data ?? []).map((r) => ({ ...(r.data as Order), id: r.id as string, status: r.status as Order['status'] }));
@@ -96,6 +110,8 @@ export async function hydrate(): Promise<void> {
       if (!pr.error) {
         setLocal('users', (pr.data ?? []).map((r) => ({ id: r.id, name: r.name ?? '', email: r.email ?? '', password: '', phone: r.phone ?? '', address: r.address ?? {}, addresses: r.addresses ?? [], joined: String(r.created_at).slice(0, 10) })));
       }
+      const pc = await sb.from('product_costs').select('pid,cost');
+      if (!pc.error) setLocal('costs', Object.fromEntries((pc.data ?? []).map((r) => [String(r.pid), Number(r.cost)])));
       const sbs = await sb.from('subscribers').select('email,created_at').order('created_at');
       if (!sbs.error) setLocal('subscribers', (sbs.data ?? []).map((r) => ({ email: r.email as string, date: r.created_at as string })));
       const ms = await sb.from('messages').select('id,data,is_read').order('id');
@@ -164,11 +180,13 @@ async function pushOrders(list: Order[]) {
     if (was === json || was === undefined) continue;
     const before = JSON.parse(was) as Record<string, unknown>, after = o as unknown as Record<string, unknown>;
     const patch: Record<string, unknown> = {};
+    const staffKeys = ['status', 'tracking', 'packed'];
     for (const key of Object.keys(after)) {
-      if (key !== 'receipts' && JSON.stringify(after[key]) !== JSON.stringify(before[key])) patch[key] = after[key];
+      if (key === 'receipts' || (role === 'staff' && !staffKeys.includes(key))) continue;
+      if (JSON.stringify(after[key]) !== JSON.stringify(before[key])) patch[key] = after[key];
     }
     if (Object.keys(patch).length) {
-      const { error } = await sb!.rpc('admin_patch_order', { oid: o.id, patch });
+      const { error } = role === 'staff' ? await sb!.rpc('staff_update_order', { oid: o.id, patch }) : await sb!.rpc('admin_patch_order', { oid: o.id, patch });
       if (error) throw error;
     }
     last.orders.set(o.id, json);
@@ -210,7 +228,7 @@ export async function publishStarter(): Promise<string> {
 export function orderErrorText(e: unknown): string {
   const m = (e as { message?: string })?.message ?? '';
   const name = m.split(':').slice(1).join(':').trim();
-  if (m.includes('out_of_stock')) return (name || 'An item') + ' is no longer available in that quantity. Please update your basket.';
+  if (m.includes('out_of_stock')) return tr('{name} is no longer available in that quantity. Please update your basket.', { name: name || tr('An item') });
   if (m.includes('unavailable')) return 'An item in your basket is no longer available. Please remove it and try again.';
   if (m.includes('bad_color') || m.includes('bad_option') || m.includes('bad_blend')) return 'A candle in your basket has options that are no longer offered. Please re-add it.';
   if (m.includes('invalid:email')) return 'Enter a valid email address.';
@@ -218,6 +236,10 @@ export function orderErrorText(e: unknown): string {
   if (m.includes('invalid:address')) return 'Enter your delivery address.';
   if (m.includes('invalid:payment')) return 'That payment method is not available.';
   if (m.includes('invalid:box')) return 'The gift box is not valid. Please rebuild it.';
+  if (m.includes('invalid:giftcode')) return 'That gift card code is not valid, or it has no balance left.';
+  if (m.includes('invalid:giftcard_use')) return 'A gift card cannot be paid for with another gift card or store credit.';
+  if (m.includes('invalid:giftcard')) return 'Gift cards are not on sale right now, or that amount is not allowed. Please remove it from your basket.';
+  if (m.includes('giftcard_changed')) return 'That gift card was just used. Please check the code and try again.';
   if (m.includes('rate_limited')) return 'Too many attempts. Please wait a little and try again.';
   return 'We could not process your order. Please check your connection and try again.';
 }
@@ -282,9 +304,143 @@ export async function fetchOrder(id: string, email: string): Promise<Order | nul
   return (data as Order | null) ?? null;
 }
 
-export async function submitReview(r: Omit<Review, 'id' | 'approved'>): Promise<void> {
-  const { error } = await sb!.from('reviews').insert({ data: r, approved: false });
-  if (error) throw error;
+/** Photos in the review bucket are stored by path; offline they are data URLs. */
+export const reviewPhotoUrl = (p: string): string => (!sb || /^(https?:|data:)/.test(p) ? p : sb.storage.from('review-photos').getPublicUrl(p).data.publicUrl);
+
+/** Upload one review photo into the order's folder. Returns the storage path (or a data URL offline). */
+export async function uploadReviewPhoto(orderId: string, file: File): Promise<{ path: string; error: string }> {
+  try {
+    const blob = await shrinkImage(file, 1200, 'image/jpeg');
+    if (!sb) return { path: await new Promise<string>((res) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.readAsDataURL(blob); }), error: '' };
+    const path = orderId + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 7) + '.jpg';
+    const up = await sb.storage.from('review-photos').upload(path, blob, { contentType: 'image/jpeg' });
+    return up.error ? { path: '', error: 'Could not upload that photo. Try a smaller one.' } : { path, error: '' };
+  } catch {
+    return { path: '', error: 'That file is not a readable image.' };
+  }
+}
+
+/** A review from someone who received the product. The server checks the order; the shop approves it before it shows. */
+export async function submitReview(a: { orderId: string; email: string; pid: number; stars: number; q: string; photos: string[]; who: string }): Promise<string> {
+  if (!sb) {
+    const list = JSON.parse(localStorage.getItem('ee_reviews') || '[]') as Review[];
+    setLocal('reviews', list.concat({ id: Date.now(), pid: a.pid, who: a.who, stars: a.stars, q: a.q, date: new Date().toISOString().slice(0, 10), approved: false, verified: true, orderId: a.orderId, photos: a.photos }));
+    return '';
+  }
+  const { error } = await sb.rpc('submit_review', { oid: a.orderId, mail: a.email, pid_in: a.pid, stars: a.stars, q: a.q, photos: a.photos });
+  if (!error) return '';
+  if (/already_reviewed/.test(error.message)) return 'You have already reviewed this candle. Thank you!';
+  if (/not_eligible/.test(error.message)) return 'Reviews open once your order is delivered.';
+  if (/invalid_review/.test(error.message)) return 'Add a star rating and a few words.';
+  return 'Could not send your review. Please try again.';
+}
+
+/** Ask the shop to cancel an order that has not been dispatched yet. */
+export async function requestCancel(orderId: string, email: string, reason: string): Promise<string> {
+  if (!sb) {
+    const list = JSON.parse(localStorage.getItem('ee_orders') || '[]') as Order[];
+    setLocal('orders', list.map((o) => (o.id === orderId ? { ...o, cancelRequest: { state: 'pending' as const, at: new Date().toISOString(), reason } } : o)));
+    return '';
+  }
+  const { data, error } = await sb.rpc('request_cancel', { oid: orderId, mail: email, reason });
+  return error || data !== true ? 'This order can no longer be cancelled online. Please message us.' : '';
+}
+
+/** Back-in-stock alert for a sold-out candle. */
+export async function requestStockAlert(pid: number, contact: string): Promise<string> {
+  if (!sb) {
+    const list = JSON.parse(localStorage.getItem('ee_alerts') || '[]') as unknown[];
+    setLocal('alerts', list.concat({ id: Date.now(), pid, contact, kind: contact.includes('@') ? 'email' : 'phone', notified: false, created_at: new Date().toISOString() }));
+    return '';
+  }
+  const { error } = await sb.rpc('request_stock_alert', { pid_in: pid, contact_in: contact });
+  if (!error) return '';
+  if (/invalid:contact/.test(error.message)) return 'Enter an email address or a mobile number.';
+  if (/rate_limited/.test(error.message)) return 'Too many requests. Please try again later.';
+  return 'Could not save that. Please try again.';
+}
+
+/** The code's remaining balance, or null when it is not valid. */
+export async function checkGiftCard(code: string): Promise<{ balance: number } | null | 'busy'> {
+  if (!sb) return null;
+  const { data, error } = await sb.rpc('check_gift_card', { c: code });
+  if (error) return /rate_limited/.test(error.message) ? 'busy' : null;
+  return (data as { balance: number } | null) ?? null;
+}
+
+/* ------------------------------------------------------------ rewards (signed-in customer) */
+export interface Wallet { credit: number; refCode: string; ledger: { id: number; delta: number; reason: string; at: string; order_id: string | null }[] }
+export async function loadWallet(): Promise<Wallet | null> {
+  if (!sb) return null;
+  const { data } = await sb.auth.getSession();
+  const id = data.session?.user.id;
+  if (!id) return null;
+  const pr = await sb.from('profiles').select('credit,ref_code').eq('id', id).maybeSingle();
+  const lg = await sb.from('credit_ledger').select('id,delta,reason,at,order_id').eq('user_id', id).order('id', { ascending: false }).limit(30);
+  if (pr.error) return null;
+  return { credit: Number(pr.data?.credit ?? 0), refCode: (pr.data?.ref_code as string | null) ?? '', ledger: (lg.data ?? []) as Wallet['ledger'] };
+}
+
+/* ----------------------------------------------------------------- admin: owner tools */
+export interface ActivityRow { id: number; at: string; actor: string; action: string; target: string | null; detail: Record<string, unknown> }
+export async function listActivity(): Promise<ActivityRow[]> {
+  if (!sb) return [];
+  const { data } = await sb.from('activity_log').select('id,at,actor,action,target,detail').order('id', { ascending: false }).limit(300);
+  return (data ?? []) as ActivityRow[];
+}
+
+/** Private cost price of one candle. Never part of the public catalogue. */
+export async function saveCost(pid: number, cost: number | null): Promise<string> {
+  const m = { ...(JSON.parse(localStorage.getItem('ee_costs') || '{}') as Record<string, number>) };
+  const clear = cost === null || !(cost >= 0);
+  if (clear) delete m[String(pid)]; else m[String(pid)] = cost;
+  setLocal('costs', m);
+  if (!sb) return '';
+  const { error } = clear ? await sb.from('product_costs').delete().eq('pid', pid) : await sb.from('product_costs').upsert({ pid, cost });
+  return error ? 'Could not save the cost price. Run the latest schema.sql in Supabase.' : '';
+}
+
+export interface GiftCardRow { code: string; amount: number; balance: number; status: 'active' | 'disabled'; recipient: string | null; from_name: string | null; message: string | null; order_id: string | null; note: string | null; created_at: string }
+export async function listGiftCards(): Promise<GiftCardRow[]> {
+  if (!sb) return [];
+  const { data } = await sb.from('gift_cards').select('*').order('created_at', { ascending: false }).limit(300);
+  return (data ?? []) as GiftCardRow[];
+}
+export async function createGiftCard(amount: number, recipient: string, note: string): Promise<{ code: string; error: string }> {
+  if (!sb) return { code: '', error: 'Gift cards need the online store.' };
+  const { data, error } = await sb.rpc('admin_create_gift_card', { amount_in: amount, recipient_in: recipient || null, note_in: note || null });
+  return error ? { code: '', error: 'Could not create the card.' } : { code: data as string, error: '' };
+}
+export async function setGiftCardStatus(code: string, status: 'active' | 'disabled'): Promise<string> {
+  if (!sb) return 'Not connected.';
+  const { error } = await sb.from('gift_cards').update({ status }).eq('code', code);
+  return error ? 'Could not update the card.' : '';
+}
+export async function adjustCredit(uid: string, delta: number, reason: string): Promise<string> {
+  if (!sb) return 'Not connected.';
+  const { error } = await sb.rpc('admin_adjust_credit', { uid, delta, reason });
+  return error ? 'Could not adjust the credit.' : '';
+}
+export async function customerCredits(): Promise<Record<string, { credit: number; refCode: string }>> {
+  if (!sb) return {};
+  const { data } = await sb.from('profiles').select('id,credit,ref_code');
+  return Object.fromEntries((data ?? []).map((r) => [r.id as string, { credit: Number(r.credit ?? 0), refCode: (r.ref_code as string | null) ?? '' }]));
+}
+
+export interface StockAlertRow { id: number; pid: number; contact: string; kind: 'email' | 'phone'; notified: boolean; created_at: string }
+export async function listStockAlerts(): Promise<StockAlertRow[]> {
+  if (!sb) return JSON.parse(localStorage.getItem('ee_alerts') || '[]') as StockAlertRow[];
+  const { data } = await sb.from('stock_alerts').select('id,pid,contact,kind,notified,created_at').order('id', { ascending: false }).limit(500);
+  return (data ?? []) as StockAlertRow[];
+}
+export async function markAlerts(ids: number[], notified: boolean): Promise<void> {
+  if (!ids.length) return;
+  if (!sb) {
+    const list = JSON.parse(localStorage.getItem('ee_alerts') || '[]') as StockAlertRow[];
+    setLocal('alerts', list.map((a) => (ids.includes(a.id) ? { ...a, notified } : a)));
+    return;
+  }
+  await sb.from('stock_alerts').update({ notified }).in('id', ids);
 }
 
 /** Add an email to the newsletter list. A repeat sign-up counts as success. */
@@ -366,6 +522,7 @@ async function loadAccount(): Promise<void> {
   const pr = await sb.from('profiles').select('name,phone,address,addresses,created_at').eq('id', u.id).maybeSingle();
   const name = (pr.data?.name as string | undefined) || (u.user_metadata?.name as string | undefined) || (u.email ?? '').split('@')[0];
   setLocal<Session>('session', { id: u.id, name, email: u.email ?? '' });
+  void loadWallet().then((w) => setLocal('wallet', w));
   if (!admin) {
     setLocal('users', [{ id: u.id, name, email: u.email ?? '', password: '', phone: (pr.data?.phone as string | undefined) ?? '', address: (pr.data?.address as Address | undefined) ?? {}, addresses: (pr.data?.addresses as SavedAddress[] | undefined) ?? [], joined: String(pr.data?.created_at ?? '').slice(0, 10) }]);
     const mine = await sb.rpc('my_orders');
@@ -383,49 +540,61 @@ export async function adminEmail(): Promise<string> {
   const { data } = await sb.auth.getSession();
   return data.session?.user.email ?? '';
 }
-export async function listAdmins(): Promise<string[]> {
+export async function listAdmins(): Promise<{ email: string; role: 'owner' | 'staff' }[]> {
   if (!sb) return [];
-  const { data } = await sb.from('admins').select('email').order('email');
-  return (data ?? []).map((r) => r.email as string);
+  const { data } = await sb.from('admins').select('email,role').order('email');
+  return (data ?? []).map((r) => ({ email: r.email as string, role: r.role === 'staff' ? 'staff' as const : 'owner' as const }));
 }
-export async function addAdmin(email: string): Promise<string> {
+export async function setAdminRole(email: string, r: 'owner' | 'staff'): Promise<string> {
   if (!sb) return 'Not connected.';
-  const { error } = await sb.from('admins').insert({ email: email.trim().toLowerCase() });
+  const { error } = await sb.from('admins').update({ role: r }).eq('email', email);
+  return error ? (error.message.includes('last owner') ? 'There must always be one owner.' : 'Could not change the role.') : '';
+}
+export async function addAdmin(email: string, r: 'owner' | 'staff' = 'staff'): Promise<string> {
+  if (!sb) return 'Not connected.';
+  const { error } = await sb.from('admins').insert({ email: email.trim().toLowerCase(), role: r });
   return error ? (error.code === '23505' ? 'That person is already an admin.' : 'Could not add admin: ' + error.message) : '';
 }
 export async function removeAdmin(email: string): Promise<string> {
   if (!sb) return 'Not connected.';
   const { error } = await sb.from('admins').delete().eq('email', email);
-  return error ? (error.message.includes('last admin') ? 'You cannot remove the last admin.' : 'Could not remove: ' + error.message) : '';
+  return error ? (/last (admin|owner)/.test(error.message) ? 'You cannot remove the last owner.' : 'Could not remove: ' + error.message) : '';
 }
 
-/* --------------------------------------------------------------- shop images (QR codes) */
-/** Shrink an image so a QR code stays sharp but small (max 700px). Returns a PNG blob. */
-async function shrinkImage(file: File): Promise<Blob> {
+/* ------------------------------------------------------------------ shop images */
+/** Shrink an image so it loads fast. Photos become JPEG; QR codes stay PNG so they stay sharp. */
+async function shrinkImage(file: File, max: number, type: 'image/jpeg' | 'image/png'): Promise<Blob> {
   const bmp = await createImageBitmap(file);
-  const k = Math.min(1, 700 / Math.max(bmp.width, bmp.height));
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas');
   c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
-  c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height);
-  return await new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('image'))), 'image/png'));
+  const g = c.getContext('2d')!;
+  if (type === 'image/jpeg') { g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); }
+  g.drawImage(bmp, 0, 0, c.width, c.height);
+  return await new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('image'))), type, 0.86));
 }
 
-/** Admin: upload a QR image. Online it goes to public storage and a URL comes back; offline it becomes a data URL. */
-export async function uploadQr(file: File): Promise<{ url: string; error: string }> {
+/**
+ * Admin: upload an image. Online it goes to public storage and a URL comes back; offline it becomes a small data URL.
+ * folder is "products", "categories", "gallery" or "qr".
+ */
+export async function uploadImage(file: File, folder: 'products' | 'categories' | 'gallery' | 'qr' = 'products'): Promise<{ url: string; error: string }> {
   try {
-    const blob = await shrinkImage(file);
+    const png = folder === 'qr';
+    const blob = await shrinkImage(file, png ? 700 : sb ? 1600 : 900, png ? 'image/png' : 'image/jpeg');
     if (!sb) {
       const url = await new Promise<string>((res) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.readAsDataURL(blob); });
       return { url, error: '' };
     }
-    const path = 'qr/' + Date.now() + '.png';
-    const up = await sb.storage.from('shop-assets').upload(path, blob, { contentType: 'image/png' });
+    const path = folder + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 7) + (png ? '.png' : '.jpg');
+    const up = await sb.storage.from('shop-assets').upload(path, blob, { contentType: png ? 'image/png' : 'image/jpeg', cacheControl: '31536000' });
     if (up.error) return { url: '', error: 'Could not upload. Run the latest schema.sql in Supabase, then try again.' };
     return { url: sb.storage.from('shop-assets').getPublicUrl(path).data.publicUrl, error: '' };
   } catch {
-    return { url: '', error: 'That file is not a readable image. Use a PNG or JPG.' };
+    return { url: '', error: 'That file is not a readable image. Use a JPG, PNG or WebP photo.' };
   }
 }
+export const uploadQr = (file: File) => uploadImage(file, 'qr');
 
 /* ----------------------------------------------------------------- phone alerts */
 export async function getNotify(): Promise<{ topic: string; site: string } | null> {

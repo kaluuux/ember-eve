@@ -341,3 +341,65 @@ a { text-underline-offset: 3px; }
 .footer { margin-top: 0; }
 .narrow { padding-bottom: 72px; }
 main { min-height: 56vh; }
+
+/* photos */
+.pcard .thumb.has-img { background-image: none; }
+.thumb-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.thumb-img.alt { opacity: 0; transition: opacity 0.6s var(--ease); }
+.pcard:hover .thumb-img.alt { opacity: 1; }
+.pcard .badge-row { position: relative; z-index: 2; }
+.gal-main { aspect-ratio: 1; border-radius: 22px; overflow: hidden; border: 1px solid var(--line); background: var(--cream); }
+.gal-main img { width: 100%; height: 100%; object-fit: cover; animation: fadeIn 0.5s ease both; }
+.gal-thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 10px; }
+.gal-thumbs button { aspect-ratio: 1; padding: 0; border-radius: 14px; overflow: hidden; border: 2px solid transparent; cursor: pointer; background: var(--cream); transition: border-color 0.2s, transform 0.3s var(--ease); }
+.gal-thumbs button:hover { transform: translateY(-2px); }
+.gal-thumbs button.on { border-color: var(--brown); }
+.gal-thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.qv-img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 18px; }
+.cat-tile .art img { width: 100%; height: 100%; object-fit: cover; opacity: 1; }
+.gallery-photo { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border-radius: 22px; border: 1px solid var(--line); transition: transform 0.6s var(--ease), box-shadow 0.6s var(--ease); }
+.gallery-photo:hover { transform: scale(1.02); box-shadow: var(--shadow-lg); }
+
+/* social icons */
+.socials { display: flex; gap: 10px; margin: 0 0 14px; }
+.socials a { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, 0.1); color: #fff; transition: transform 0.3s var(--ease), background 0.2s; }
+.socials a:hover { background: var(--gold); color: var(--ink-deep); transform: translateY(-3px); }
+.socials svg { width: 19px; height: 19px; }
+.socials.light a { background: var(--cream); color: var(--brown); }
+.socials.light a:hover { background: var(--brown); color: #fff; }
+
+/* ---------------------------------------------------------------- reviews, alerts, rewards */
+.verified { margin-left: 8px; font-size: 12px; font-weight: 600; color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); padding: 2px 8px; border-radius: 999px; }
+.rv-photos { display: flex; gap: 6px; flex-wrap: wrap; }
+.rv-photos img { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; display: block; }
+.rv-thumb { position: relative; width: 64px; height: 64px; border-radius: 10px; overflow: hidden; background: var(--sand-l); display: inline-block; }
+.rv-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rv-thumb button { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; font-size: 14px; line-height: 1; cursor: pointer; }
+.notify-me { background: var(--cream); border-radius: 12px; padding: 14px; }
+.wallet { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.wallet .tile { background: var(--cream); border-radius: 14px; padding: 16px; }
+.wallet .tile b { display: block; font-size: 22px; margin-top: 2px; }
+.perk-code { font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: .04em; font-weight: 700; }
+.lang-switch { display: inline-flex; gap: 2px; align-items: center; }
+.lang-switch button { font: 600 12px Inter, sans-serif; padding: 4px 8px; border-radius: 999px; border: 1px solid transparent; background: transparent; color: var(--text2, #555); cursor: pointer; }
+.lang-switch button[aria-pressed='true'] { background: var(--brown); color: #fff; }
+.topbar { position: relative; }
+.topbar-lang { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); letter-spacing: 0; }
+@media (max-width: 760px) { .topbar-lang { display: none; } }
+/* Sinhala and Tamil need a little more line height */
+html[lang='si'] body, html[lang='ta'] body { line-height: 1.65; }
+html[lang='si'] .btn, html[lang='ta'] .btn { letter-spacing: 0; }
+html[lang='si'] .nav a, html[lang='ta'] .nav a { letter-spacing: 0; }
+
+/* Sinhala and Tamil words run longer than English: keep the header on one row */
+.header .brand span { white-space: nowrap; }
+html[lang='si'] .header .nav, html[lang='ta'] .header .nav { gap: 15px; }
+html[lang='si'] .header .nav a, html[lang='ta'] .header .nav a, html[lang='si'] .header .dd-btn, html[lang='ta'] .header .dd-btn { font-size: 13.5px; }
+html[lang='si'] .header .search, html[lang='ta'] .header .search { width: 100px; }
+html[lang='si'] .header, html[lang='ta'] .header { gap: 14px; }
+html[lang='si'] .header > div:last-child, html[lang='ta'] .header > div:last-child { flex-wrap: nowrap !important; gap: 12px !important; white-space: nowrap; }
+@media (max-width: 1420px) { html[lang='si'] .header a.hide-sm, html[lang='ta'] .header a.hide-sm { display: none; } }
+html[lang='si'] .hero-title { font-size: clamp(32px, 4.2vw, 52px); line-height: 1.22; letter-spacing: 0; }
+html[lang='ta'] .hero-title { font-size: clamp(32px, 4.4vw, 54px); line-height: 1.18; letter-spacing: 0; }
+html[lang='si'] .h1, html[lang='ta'] .h1 { line-height: 1.25; }
+.lang-switch button { white-space: nowrap; }

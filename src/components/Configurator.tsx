@@ -3,9 +3,11 @@ import { Chip } from './ui';
 import { CUSTOM, STICKER_MAX, allowedColors, blendFee, normalize, type Selection } from '../commerce';
 import { money } from '../store';
 import type { Product } from '../types';
+import { useT } from '../i18n';
 
 /** Option groups, colour swatches and the custom blend picker for one product. Fully driven by the product's data. */
 export function Configurator({ p, sel, onChange, size = 'lg' }: { p: Product; sel: Selection; onChange: (s: Selection) => void; size?: 'sm' | 'lg' }) {
+  const t = useT();
   const { colors, settings } = useApp();
   const upd = (o: Partial<Selection>) => onChange(normalize(p, { ...sel, ...o }, colors));
   const allowed = allowedColors(p, sel.opts, colors);
@@ -32,8 +34,8 @@ export function Configurator({ p, sel, onChange, size = 'lg' }: { p: Product; se
 
       {p.colors && (
         <div>
-          <div className="label-s">Colour: {curName}{allowed.length === 1 ? ' (only colour for this option)' : ''}</div>
-          <div className="swatches" role="radiogroup" aria-label="Colour">
+          <div className="label-s">{t('Colour:')}{' '}{curName}{allowed.length === 1 ? t(' (only colour for this option)') : ''}</div>
+          <div className="swatches" role="radiogroup" aria-label={t('Colour')}>
             {allowed.map((c) => (
               <button
                 key={c.id}
@@ -48,7 +50,7 @@ export function Configurator({ p, sel, onChange, size = 'lg' }: { p: Product; se
               />
             ))}
             {canBlend && (
-              <button type="button" className={'swatch blend' + (custom ? ' on' : '')} aria-checked={custom} role="radio" aria-label="Custom blend" title="Custom blend" onClick={() => upd({ color: CUSTOM, blend: sel.blend.length ? sel.blend : allowed.slice(0, 2).map((c) => c.id) })}>
+              <button type="button" className={'swatch blend' + (custom ? ' on' : '')} aria-checked={custom} role="radio" aria-label={t('Custom blend')} title={t('Custom blend')} onClick={() => upd({ color: CUSTOM, blend: sel.blend.length ? sel.blend : allowed.slice(0, 2).map((c) => c.id) })}>
                 +
               </button>
             )}
@@ -56,7 +58,7 @@ export function Configurator({ p, sel, onChange, size = 'lg' }: { p: Product; se
           {custom && (
             <div className="blend-box">
               <div style={{ fontSize: 13, color: 'var(--text2)' }}>
-                Pick 2 or more colours to shade together. The first {settings.freeColors} are free, then +{money(settings.extraColorFee)} for each extra colour.
+                {t('Pick 2 or more colours to shade together. The first {n} are free, then +{fee} for each extra colour.', { n: settings.freeColors, fee: money(settings.extraColorFee) })}
               </div>
               <div className="swatches" style={{ marginTop: 8 }}>
                 {allowed.map((c) => (
@@ -73,7 +75,7 @@ export function Configurator({ p, sel, onChange, size = 'lg' }: { p: Product; se
                 ))}
               </div>
               <div style={{ fontSize: 13, marginTop: 8, color: sel.blend.length < 2 ? 'var(--red)' : 'var(--text2)' }}>
-                {sel.blend.length < 2 ? 'Choose at least 2 colours.' : sel.blend.map((id) => colors.find((c) => c.id === id)?.name).join(' + ') + (fee ? ` · colour fee ${money(fee)}` : ' · no colour fee')}
+                {sel.blend.length < 2 ? t('Choose at least 2 colours.') : sel.blend.map((id) => colors.find((c) => c.id === id)?.name).join(' + ') + (fee ? ` · colour fee ${money(fee)}` : ' · no colour fee')}
               </div>
             </div>
           )}
@@ -84,11 +86,11 @@ export function Configurator({ p, sel, onChange, size = 'lg' }: { p: Product; se
         <div>
           <label style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
             <input type="checkbox" checked={sel.sticker !== undefined} onChange={(e) => upd({ sticker: e.target.checked ? '' : undefined })} style={{ width: 18, height: 18, accentColor: '#8F6642' }} />
-            Add a custom message or quote on the sticker <span style={{ color: 'var(--green)', fontWeight: 600 }}>(free)</span>
+            {t('Add a custom message or quote on the sticker')}{' '}<span style={{ color: 'var(--green)', fontWeight: 600 }}>{t('(free)')}</span>
           </label>
           {sel.sticker !== undefined && (
             <div style={{ marginTop: 8 }}>
-              <input className="input" maxLength={STICKER_MAX} value={sel.sticker} onChange={(e) => upd({ sticker: e.target.value })} placeholder="e.g. Happy Birthday Amma" aria-label="Sticker message" />
+              <input className="input" maxLength={STICKER_MAX} value={sel.sticker} onChange={(e) => upd({ sticker: e.target.value })} placeholder={t('e.g. Happy Birthday Amma')} aria-label={t('Sticker message')} />
               <div className="muted" style={{ fontSize: 12, textAlign: 'right', marginTop: 2 }}>{sel.sticker.length}/{STICKER_MAX}</div>
             </div>
           )}

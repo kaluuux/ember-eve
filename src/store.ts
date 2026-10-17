@@ -95,7 +95,9 @@ export function money(n: number): string {
 export const DEFAULT_SETTINGS: Settings = {
   shop: 'Ember & Eve', email: 'hello@emberandeve.example', standard: 450, express: 900, freeOver: 8000, giftWrap: 300,
   freeColors: 3, extraColorFee: 100, giftBoxFee: 1000, giftBoxes: [], districts: [],
+  gallery: [], instagram: '', facebook: '', tiktok: '', youtube: '',
   pickupAddress: '', businessAddress: '', businessPhone: '', taxId: '', invoiceNote: '', invoiceDueDays: 10, whatsapp: '', banks: [],
+  giftCardsOn: false, giftCardMin: 500, giftCardMax: 50000, loyaltyPct: 0, referralFriend: 0, referralReward: 0,
   pay: { card: false, bank: true, whatsapp: false, store: false }, payhereMerchantId: '', payhereSandbox: true,
 };
 
@@ -114,6 +116,9 @@ export function addressBook(u: Pick<User, 'name' | 'address' | 'addresses' | 'ph
   if (!a?.a1) return [];
   return [{ id: 'main', label: 'Home', name: [a.first, a.last].filter(Boolean).join(' ') || u.name, phone: a.phone || u.phone || '', a1: a.a1, a2: a.a2 ?? '', city: a.city ?? '', district: a.district ?? '', post: a.post ?? '', isDefault: true }];
 }
+
+/** Only ever link to http(s) addresses someone typed into the admin. */
+export const safeUrl = (u: string | undefined) => (u && /^https?:\/\/\S+$/i.test(u.trim()) ? u.trim() : '');
 
 export const SL_DISTRICTS = ['Ampara', 'Anuradhapura', 'Badulla', 'Batticaloa', 'Colombo', 'Galle', 'Gampaha', 'Hambantota', 'Jaffna', 'Kalutara', 'Kandy', 'Kegalle', 'Kilinochchi', 'Kurunegala', 'Mannar', 'Matale', 'Matara', 'Monaragala', 'Mullaitivu', 'Nuwara Eliya', 'Polonnaruwa', 'Puttalam', 'Ratnapura', 'Trincomalee', 'Vavuniya'];
 

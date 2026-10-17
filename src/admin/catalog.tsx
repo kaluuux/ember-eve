@@ -3,7 +3,9 @@ import { EMPTY, get, money, set, useStored } from '../store';
 import { Chip, ErrorText } from '../components/ui';
 import { seasonLive } from '../commerce';
 import { remote } from '../remote';
-import { publishStarter } from '../sync';
+import { PhotoManager } from './PhotoManager';
+import { publishStarter, saveCost } from '../sync';
+import { NO_COSTS, type Costs } from '../profit';
 import type { Category, Color, Group, Opt, Pin, Product, Season } from '../types';
 
 type Flash = (m: string) => void;
@@ -23,6 +25,7 @@ export function ProductsView({ flash }: { flash: Flash }) {
   const [cat, setCat] = useState('');
   const [q, setQ] = useState('');
   const [pct, setPct] = useState('');
+  const costs = useStored<Costs>('costs', NO_COSTS);
 
   const rows = products.filter((p) => (!cat || p.cat === cat) && (!q || p.name.toLowerCase().includes(q.toLowerCase())));
   const patch = (id: number, o: Partial<Product>) => set('products', get<Product[]>('products', []).map((x) => (x.id === id ? { ...x, ...o } : x)));
@@ -60,7 +63,7 @@ export function ProductsView({ flash }: { flash: Flash }) {
       </div>
       <div className="card flush" style={{ overflowX: 'auto' }}>
         <table className="table">
-          <thead><tr><th>Product</th><th>Base price</th><th>Sale %</th><th>Stock</th><th>Shelves</th><th>Status</th><th /></tr></thead>
+          <thead><tr><th>Product</th><th>Base price</th><th>Cost</th><th>Sale %</th><th>Stock</th><th>Shelves</th><th>Status</th><th /></tr></thead>
           <tbody>
             {rows.map((p) => {
               const se = seasons.find((x) => x.id === p.season);
@@ -73,6 +76,10 @@ export function ProductsView({ flash }: { flash: Flash }) {
                     </div>
                   </td>
                   <td><input className="input" type="number" min={0} style={{ width: 90 }} aria-label={'Base price ' + p.name} defaultValue={p.base} key={'b' + p.base} onBlur={(e) => { const v = Number(e.target.value); if (v > 0 && v !== p.base) patch(p.id, { base: Math.round(v) }); }} /></td>
+                  <td>
+                    <input className="input" type="number" min={0} style={{ width: 80 }} aria-label={'Cost price ' + p.name} defaultValue={costs[String(p.id)] ?? ''} key={'c' + costs[String(p.id)]} placeholder="Not set" onBlur={(e) => { const v = e.target.value.trim() === '' ? null : Math.max(0, Math.round(Number(e.target.value) || 0)); if (v !== (costs[String(p.id)] ?? null)) void saveCost(p.id, v).then((m) => m && flash(m)); }} />
+                    {costs[String(p.id)] !== undefined && p.base > 0 && <div style={{ fontSize: 11, color: 'var(--muted2)', marginTop: 2 }}>{Math.round(((p.base * (1 - p.salePct / 100) - costs[String(p.id)]) / (p.base * (1 - p.salePct / 100))) * 100)}% margin</div>}
+                  </td>
                   <td><input className="input" type="number" min={0} max={90} style={{ width: 70 }} aria-label={'Sale percent ' + p.name} defaultValue={p.salePct || ''} key={'s' + p.salePct} placeholder="0" onBlur={(e) => { const v = Math.min(90, Math.max(0, Math.round(Number(e.target.value) || 0))); if (v !== p.salePct) patch(p.id, { salePct: v }); }} /></td>
                   <td><input className="input" type="number" min={0} style={{ width: 90 }} aria-label={'Stock ' + p.name} defaultValue={p.stock ?? ''} key={'k' + p.stock} placeholder="Made to order" onBlur={(e) => { const v = num(e.target.value); if (v !== p.stock) patch(p.id, { stock: v }); }} /></td>
                   <td>
@@ -96,11 +103,11 @@ export function ProductsView({ flash }: { flash: Flash }) {
                 </tr>
               );
             })}
-            {rows.length === 0 && <tr><td colSpan={7} className="muted">No products match.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={8} className="muted">No products match.</td></tr>}
           </tbody>
         </table>
       </div>
-      <p className="muted" style={{ fontSize: 13, marginTop: 12 }}>Edits to price, sale, stock, shelves and visibility save as you leave each field and show on the storefront straight away. Leave stock empty for made-to-order candles.</p>
+      <p className="muted" style={{ fontSize: 13, marginTop: 12 }}>Edits to price, sale, stock, shelves and visibility save as you leave each field and show on the storefront straight away. Leave stock empty for made-to-order candles. The cost column is private: it is never shown to customers, and it feeds the profit figures on the dashboard.</p>
       {editing && <ProductEditor product={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); flash('Product saved'); }} />}
     </>
   );
@@ -111,6 +118,8 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
   const seasons = useStored<Season[]>('seasons', EMPTY);
   const palette = useStored<Color[]>('colors', EMPTY);
   const [d, setD] = useState<Product>(product);
+  const costs = useStored<Costs>('costs', NO_COSTS);
+  const [cost, setCost] = useState(() => (costs[String(product.id)] !== undefined ? String(costs[String(product.id)]) : ''));
   const [err, setErr] = useState('');
   const up = (o: Partial<Product>) => setD((t) => ({ ...t, ...o }));
   const setGroup = (gi: number, o: Partial<Group>) => up({ groups: d.groups.map((g, i) => (i === gi ? { ...g, ...o } : g)) });
@@ -128,6 +137,8 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
     const clean: Product = { ...d, id: d.id || Date.now(), name: d.name.trim(), base: Math.round(d.base), custom: d.colors && d.custom };
     const all = get<Product[]>('products', []);
     set('products', d.id ? all.map((x) => (x.id === d.id ? clean : x)) : all.concat(clean));
+    const cv = cost.trim() === '' ? null : Math.max(0, Math.round(Number(cost) || 0));
+    if (cv !== (costs[String(clean.id)] ?? null)) void saveCost(clean.id, cv);
     onSaved();
   };
 
@@ -148,8 +159,10 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
             </select>
           </label>
           <label style={{ ...field, gridColumn: 'span 2' }}>Short description<input className="input" value={d.blurb} onChange={(e) => up({ blurb: e.target.value })} /></label>
+          <div style={{ ...field, gridColumn: 'span 2' }}>Photos<PhotoManager images={d.images ?? []} onChange={(images) => up({ images })} folder="products" max={8} /></div>
           <label style={{ ...field, gridColumn: 'span 2' }}>Full description<textarea className="input" rows={3} value={d.desc} onChange={(e) => up({ desc: e.target.value })} /></label>
           <label style={field}>Base price (Rs)<input className="input" type="number" min={0} value={d.base || ''} onChange={(e) => up({ base: Number(e.target.value) })} /></label>
+          <label style={field}>Cost to make (Rs, private)<input className="input" type="number" min={0} value={cost} placeholder="Not set" onChange={(e) => setCost(e.target.value)} /></label>
           <label style={field}>Sale % (0 = none)<input className="input" type="number" min={0} max={90} value={d.salePct || ''} onChange={(e) => up({ salePct: Math.min(90, Math.max(0, Number(e.target.value) || 0)) })} /></label>
           <label style={field}>Stock (empty = made to order)<input className="input" type="number" min={0} value={d.stock ?? ''} onChange={(e) => up({ stock: e.target.value === '' ? null : Math.max(0, Math.floor(Number(e.target.value))) })} /></label>
           <label style={field}>Season
@@ -252,6 +265,7 @@ export function CatalogView({ flash }: { flash: Flash }) {
             const used = products.filter((p) => p.cat === c.id).length;
             return (
               <div key={c.id} style={row}>
+                <div style={{ width: 92 }}><PhotoManager compact images={c.image ? [c.image] : []} onChange={(l) => set('categories', categories.map((x, j) => (j === i ? { ...x, image: l[0] ?? '' } : x)))} folder="categories" max={1} /></div>
                 <input className="input" style={{ flex: '1 1 160px' }} aria-label="Type name" value={c.name} onChange={(e) => set('categories', categories.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
                 <input className="input" style={{ flex: '3 1 240px' }} aria-label="Type description" value={c.blurb} onChange={(e) => set('categories', categories.map((x, j) => (j === i ? { ...x, blurb: e.target.value } : x)))} />
                 <button type="button" className="btn-xs danger" onClick={() => used ? flash('Move its ' + used + ' products to another type first') : set('categories', categories.filter((_, j) => j !== i))}>Delete</button>

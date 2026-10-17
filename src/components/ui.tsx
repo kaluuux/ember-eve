@@ -1,4 +1,5 @@
 import { useCallback, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react';
+import { tr } from '../i18n';
 
 export type FormValues = Record<string, string | number | undefined>;
 
@@ -47,6 +48,11 @@ export function Chip({ on, onClick, size = 'sm', soft, children, style }: ChipPr
 }
 
 /** Labelled placeholder block standing in for photography. */
+/** Small square preview: the product photo when there is one, otherwise its colour. */
+export function Thumb({ tint, img, size = 56, radius = 12 }: { tint: string; img?: string; size?: number; radius?: number }) {
+  return <div style={{ width: size, height: size, borderRadius: radius, flex: 'none', border: '1px solid var(--line)', background: tint.toUpperCase() === '#FFFFFF' ? '#F3EADF' : tint, ...(img ? { backgroundImage: 'url(' + img + ')', backgroundSize: 'cover', backgroundPosition: 'center' } : {}) }} />;
+}
+
 export function Ph({ tint, label, ratio, stripe, style, children, className }: { tint: string; label?: string; ratio?: string; stripe?: boolean; style?: CSSProperties; children?: ReactNode; className?: string }) {
   return (
     <div className={'ph' + (stripe ? ' stripe' : '') + (className ? ' ' + className : '')} style={{ background: tint, aspectRatio: ratio, ...style }}>
@@ -56,7 +62,7 @@ export function Ph({ tint, label, ratio, stripe, style, children, className }: {
 }
 
 export function ErrorText({ children }: { children?: ReactNode }) {
-  return children ? <div className="err" role="alert">{children}</div> : null;
+  return children ? <div className="err" role="alert">{typeof children === 'string' ? tr(children) : children}</div> : null;
 }
 
 export function Stepper({ qty, onDec, onInc, small }: { qty: number; onDec: () => void; onInc: () => void; small?: boolean }) {

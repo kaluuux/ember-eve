@@ -4,12 +4,14 @@ import { Configurator } from '../components/Configurator';
 import { Stepper } from '../components/ui';
 import { blendValid, defaultSelection, describe, inStock, normalize, selectionTint, unitPrice, type Selection } from '../commerce';
 import { money } from '../store';
+import { useT } from '../i18n';
 
 interface Slot { pid: number; sel: Selection }
 const MIN = 2, MAX = 8;
 
 /** Gift box builder: any candle from the live catalogue, each with its own options and colour. Box fee comes from settings. */
 export function Gifts() {
+  const t = useT();
   const { active, colors, categories, settings, addLine, flash } = useApp();
   const first = active.filter(inStock)[0];
   const mkSlot = (pid: number): Slot => {
@@ -32,8 +34,8 @@ export function Gifts() {
   if (!first) {
     return (
       <section id="gifts" className="page-72">
-        <h2 className="h2">Create Your Own Gift Box</h2>
-        <p className="muted">No candles are available right now. Please check back soon.</p>
+        <h2 className="h2">{t('Create Your Own Gift Box')}</h2>
+        <p className="muted">{t('No candles are available right now. Please check back soon.')}</p>
       </section>
     );
   }
@@ -64,19 +66,19 @@ export function Gifts() {
 
   return (
     <section id="gifts" className="page-72">
-      <h2 className="h2">Create Your Own Gift Box</h2>
+      <h2 className="h2">{t('Create Your Own Gift Box')}</h2>
       <p style={{ margin: '4px 0 24px', fontSize: 16, color: 'var(--muted)' }}>
-        Choose any candles, pick each colour, and we pack them in a custom gift box (+{money(fee)}). You pay for the candles plus the box.
+        {t('Choose any candles, pick each colour, and we pack them in a custom gift box (+{fee}). You pay for the candles plus the box.', { fee: money(fee) })}
       </p>
       {box ? (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }} role="radiogroup" aria-label="Box size">
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }} role="radiogroup" aria-label={t('Box size')}>
           {boxes.map((b) => (
-            <button key={b.id} type="button" role="radio" aria-checked={b.id === box.id} className={'chip wide' + (b.id === box.id ? ' on' : '')} onClick={() => setBoxId(b.id)}>{b.label || b.slots + ' candles'} · {b.slots} candles · +{money(b.fee)}</button>
+            <button key={b.id} type="button" role="radio" aria-checked={b.id === box.id} className={'chip wide' + (b.id === box.id ? ' on' : '')} onClick={() => setBoxId(b.id)}>{b.label || t('Box')} · {t('{n} candles · +{fee}', { n: b.slots, fee: money(b.fee) })}</button>
           ))}
         </div>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-          <span style={{ fontSize: 14, fontWeight: 600 }}>Candles in the box</span>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>{t('Candles in the box')}</span>
           <Stepper small qty={slots.length} onDec={() => resize(Math.max(MIN, slots.length - 1))} onInc={() => resize(Math.min(MAX, slots.length + 1))} />
         </div>
       )}
@@ -84,7 +86,7 @@ export function Gifts() {
         {rows.map((r, i) => (
           <div key={i} className="card stack" style={{ padding: 16, gap: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--brown)' }}>Candle {i + 1}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--brown)' }}>{t('Candle')}{' '}{i + 1}</div>
               <div style={{ fontSize: 14, fontWeight: 600 }}>{money(r.unit)}</div>
             </div>
             <div className="ph ph-art" style={{ backgroundColor: selectionTint(r.sel, colors), aspectRatio: '3/2', borderRadius: 14 }}>{r.p?.name}</div>
@@ -107,21 +109,21 @@ export function Gifts() {
       <div className="card stack" style={{ marginTop: 24, padding: 16, gap: 12 }}>
         <label style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
           <input type="checkbox" checked={wantNote} onChange={(e) => setWantNote(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#8F6642' }} />
-          Add a personal note to the gift box
+          {t('Add a personal note to the gift box')}
         </label>
         {wantNote && (
           <div className="stack" style={{ gap: 4 }}>
-            <textarea className="input" rows={3} maxLength={250} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Write the message you would like inside the box" aria-label="Gift box note" />
+            <textarea className="input" rows={3} maxLength={250} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('Write the message you would like inside the box')} aria-label={t('Gift box note')} />
             <div className="muted" style={{ fontSize: 12, textAlign: 'right' }}>{note.length}/250</div>
           </div>
         )}
       </div>
       <div className="card" style={{ marginTop: 16, padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <div className="muted" style={{ color: 'var(--muted2)' }}>Candles {money(candles)} + gift box {money(fee)}</div>
+          <div className="muted" style={{ color: 'var(--muted2)' }}>{t('Candles {a} + gift box {b}', { a: money(candles), b: money(fee) })}</div>
           <div style={{ fontSize: 22, fontWeight: 700 }}>{money(total)}</div>
         </div>
-        <button type="button" className={'btn' + (valid ? '' : ' disabled')} onClick={add}>Add Box to Basket</button>
+        <button type="button" className={'btn' + (valid ? '' : ' disabled')} onClick={add}>{t('Add Box to Basket')}</button>
       </div>
     </section>
   );

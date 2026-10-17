@@ -6,11 +6,13 @@ import { money } from '../store';
 import { go, type Route } from '../router';
 import { SHELVES, inStock, lowestPrice, type Shelf } from '../commerce';
 import { useHydrated } from '../sync';
+import { useT } from '../i18n';
 
 type Sort = 'feat' | 'lo' | 'hi' | 'az';
 
 /** Filters come from the URL (?cat=, ?shelf=, ?season=, ?q=) so home links and the menu can deep-link here. */
 export function Shop({ route }: { route: Route }) {
+  const t = useT();
   const { active, seasonal: seasonalAll, seasons, categories, liveSeasons, shelf } = useApp();
   const hydrated = useHydrated();
   const cat = route.q.cat || '';
@@ -48,60 +50,60 @@ export function Shop({ route }: { route: Route }) {
     go('shop' + (qs.toString() ? '?' + qs.toString() : ''));
   };
   const clear = () => { setCapPct(100); setStockOnly(false); go('shop'); };
-  const title = seasonalMode ? (season ? seasons.find((s) => s.id === season)?.name : 'Seasonal Candles') : shelfId ? SHELVES.find((s) => s.id === shelfId)?.title : season ? liveSeasons.find((s) => s.id === season)?.name : categories.find((c) => c.id === cat)?.name;
+  const title = seasonalMode ? (season ? seasons.find((s) => s.id === season)?.name : t('Seasonal Candles')) : shelfId ? t(SHELVES.find((s) => s.id === shelfId)?.title ?? '') : season ? liveSeasons.find((s) => s.id === season)?.name : categories.find((c) => c.id === cat)?.name;
 
   return (
     <section className="page">
-      <div className="crumb">Home / Shop{title ? ' / ' + title : ''}</div>
+      <div className="crumb">{t('Home / Shop')}{title ? ' / ' + title : ''}</div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap', margin: '8px 0 24px' }}>
         <div>
-          <h1 className="h1">{title || 'Shop'}</h1>
-          <p className="muted" style={{ margin: '4px 0 0' }}>{list.length} {list.length === 1 ? 'candle' : 'candles'}</p>
+          <h1 className="h1">{title || t('Shop')}</h1>
+          <p className="muted" style={{ margin: '4px 0 0' }}>{list.length} {list.length === 1 ? t('candle') : t('candles')}</p>
         </div>
-        <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Sort" style={{ font: '500 14px Inter', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--sand)', background: '#fff', color: 'var(--ink)' }}>
-          <option value="feat">Sort: Featured</option>
-          <option value="lo">Price: Low to High</option>
-          <option value="hi">Price: High to Low</option>
-          <option value="az">Name: A to Z</option>
+        <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label={t('Sort')} style={{ font: '500 14px Inter', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--sand)', background: '#fff', color: 'var(--ink)' }}>
+          <option value="feat">{t('Sort: Featured')}</option>
+          <option value="lo">{t('Price: Low to High')}</option>
+          <option value="hi">{t('Price: High to Low')}</option>
+          <option value="az">{t('Name: A to Z')}</option>
         </select>
       </div>
 
       <div className="layout-shop">
         <aside className="card stack" style={{ gap: 16 }}>
-          {route.q.q && <div style={{ fontSize: 14 }}>Search: <b>{route.q.q}</b> <a href="#/shop" style={{ marginLeft: 8, fontSize: 12 }}>Clear</a></div>}
+          {route.q.q && <div style={{ fontSize: 14 }}>{t('Search:')}{' '}<b>{route.q.q}</b> <a href="/shop" style={{ marginLeft: 8, fontSize: 12 }}>{t('Clear')}</a></div>}
           <div>
-            <div className="label-s">Type</div>
+            <div className="label-s">{t('Type')}</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <Chip on={!cat} onClick={() => link({ cat: '' })}>All</Chip>
+              <Chip on={!cat} onClick={() => link({ cat: '' })}>{t('All')}</Chip>
               {categories.map((c) => <Chip key={c.id} on={cat === c.id} onClick={() => link({ cat: c.id })}>{c.name}</Chip>)}
             </div>
           </div>
           {seasonalMode ? (
             <div>
-              <div className="label-s">Season</div>
+              <div className="label-s">{t('Season')}</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <Chip on={!season} onClick={() => link({ season: '' })}>All seasons</Chip>
+                <Chip on={!season} onClick={() => link({ season: '' })}>{t('All seasons')}</Chip>
                 {seasons.filter((s) => seasonalAll.some((p) => p.season === s.id)).map((s) => (
-                  <Chip key={s.id} on={season === s.id} onClick={() => link({ season: s.id })}>{s.name.replace(' Collection', '')}{liveSeasons.some((l) => l.id === s.id) ? ' · now' : ''}</Chip>
+                  <Chip key={s.id} on={season === s.id} onClick={() => link({ season: s.id })}>{s.name.replace(' Collection', '')}{liveSeasons.some((l) => l.id === s.id) ? t(' · now') : ''}</Chip>
                 ))}
               </div>
             </div>
           ) : (
             <div>
-              <div className="label-s">Collections</div>
+              <div className="label-s">{t('Collections')}</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <Chip on={!shelfId && !season} onClick={() => link({ shelf: '', season: '' })}>All</Chip>
-                {SHELVES.filter((s) => shelf(s.id).length > 0).map((s) => <Chip key={s.id} on={shelfId === s.id} onClick={() => link({ shelf: s.id, season: '' })}>{s.title}</Chip>)}
+                <Chip on={!shelfId && !season} onClick={() => link({ shelf: '', season: '' })}>{t('All')}</Chip>
+                {SHELVES.filter((s) => shelf(s.id).length > 0).map((s) => <Chip key={s.id} on={shelfId === s.id} onClick={() => link({ shelf: s.id, season: '' })}>{t(s.title)}</Chip>)}
                 {liveSeasons.map((s) => <Chip key={s.id} on={season === s.id} onClick={() => link({ season: s.id, shelf: '' })}>{s.name.replace(' Collection', '')}</Chip>)}
               </div>
             </div>
           )}
           <div>
-            <div className="label-s">Up to {money(max)}</div>
-            <input type="range" min={10} max={100} step={5} value={capPct} onChange={(e) => setCapPct(Number(e.target.value))} aria-label="Maximum price" style={{ width: '100%', accentColor: '#8F6642' }} />
+            <div className="label-s">{t('Up to')}{' '}{money(max)}</div>
+            <input type="range" min={10} max={100} step={5} value={capPct} onChange={(e) => setCapPct(Number(e.target.value))} aria-label={t('Maximum price')} style={{ width: '100%', accentColor: '#8F6642' }} />
           </div>
           <button type="button" className="chip lg soft" onClick={() => setStockOnly(!stockOnly)} aria-pressed={stockOnly} style={{ textAlign: 'left', borderColor: stockOnly ? 'var(--brown)' : undefined, background: stockOnly ? 'var(--cream)' : '#fff' }}>
-            {stockOnly ? 'In stock only: on' : 'In stock only: off'}
+            {stockOnly ? t('In stock only: on') : t('In stock only: off')}
           </button>
         </aside>
 
@@ -109,9 +111,9 @@ export function Shop({ route }: { route: Route }) {
           {list.length === 0 && !hydrated && <div className="pgrid">{[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="skel" />)}</div>}
           {list.length === 0 && hydrated && (
             <div className="card" style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 18, fontWeight: 500 }}>No candles match.</div>
-              <p className="muted">Try removing a filter.</p>
-              <button type="button" className="btn ghost" onClick={clear}>Clear Filters</button>
+              <div style={{ fontSize: 18, fontWeight: 500 }}>{t('No candles match.')}</div>
+              <p className="muted">{t('Try removing a filter.')}</p>
+              <button type="button" className="btn ghost" onClick={clear}>{t('Clear Filters')}</button>
             </div>
           )}
           <div className="pgrid">{list.map((p) => <ProductCard key={p.id} p={p} />)}</div>
