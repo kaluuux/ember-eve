@@ -109,7 +109,7 @@ export const EMPTY: never[] = [];
 
 const FRAG: Group = {
   id: 'frag', label: 'Fragrance',
-  options: [{ id: 'none', label: 'Unscented', add: 0 }, ...['Vanilla', 'Lavender', 'Jasmine', 'Rosemary', 'Strawberry'].map((n) => ({ id: n.toLowerCase(), label: n, add: 150 }))],
+  options: [{ id: 'none', label: 'Unscented', add: 0 }, ...['Vanilla', 'Lavender', 'Jasmine', 'Rosemary', 'Strawberry'].map((n) => ({ id: n.toLowerCase(), label: n, add: 50 }))],
 };
 const GLASS_SIZE: Group = { id: 'size', label: 'Size', options: [{ id: 's', label: 'Small (150g)', add: 0 }, { id: 'l', label: 'Large (300g)', add: 600 }] };
 
@@ -126,7 +126,7 @@ export function starterCatalog() {
   let id = 1;
   const molds = ['Rose', 'Lotus', 'Heart', 'Butterfly', 'Bubble', 'Flower', 'Pillar', 'Seashell', 'Star', 'Cloud', 'Teddy Bear', 'Tulip'];
   molds.forEach((n, i) => products.push(mk(id++, n + ' Candle', 'mold', 450 + (i % 4) * 100, 'A hand-poured ' + n.toLowerCase() + ', made in the colour you choose.', {
-    stock: n === 'Rose' ? 3 : n === 'Cloud' ? 0 : null, salePct: n === 'Tulip' ? 15 : 0, created: ago(i === 3 ? 6 : i === 9 ? 12 : 90), featured: i < 4,
+    groups: [FRAG], stock: n === 'Rose' ? 3 : n === 'Cloud' ? 0 : null, salePct: n === 'Tulip' ? 15 : 0, created: ago(i === 3 ? 6 : i === 9 ? 12 : 90), featured: i < 4,
   })));
   products.push(mk(id++, 'Classic Glass Candle', 'glass', 1200, 'Simple and clean in a glass vessel. Scented or unscented.', { groups: [GLASS_SIZE, FRAG], featured: true }));
   products.push(mk(id++, 'Sea Theme Glass Candle', 'glass', 1500, 'Shells and ocean tones layered inside the glass.', { groups: [GLASS_SIZE, FRAG], created: ago(9) }));
@@ -150,7 +150,7 @@ export function starterCatalog() {
     ['traditional', 'Avurudu Lamp Candle', 'mold', 600, 'A lamp-shaped candle for festive gatherings.'],
   ];
   seasonal.forEach(([season, n, cat, base, blurb]) => products.push(mk(id++, n, cat, base, blurb, {
-    season, groups: cat === 'glass' ? [GLASS_SIZE, FRAG] : cat === 'jar' ? [FRAG] : [], created: ago(season === 'halloween' ? 5 : 40),
+    season, groups: cat === 'glass' ? [GLASS_SIZE, FRAG] : [FRAG], created: ago(season === 'halloween' ? 5 : 40),
   })));
   return {
     products,
@@ -167,7 +167,7 @@ export function starterCatalog() {
 }
 
 function seed() {
-  if (remote || get('seeded_v2', false)) return;
+  if (remote || get('seeded_v3', false)) return;
   const day = 86400000, now = Date.now();
   const ago = (d: number) => new Date(now - d * day).toISOString();
   const { products } = starterCatalog();
@@ -196,12 +196,12 @@ function seed() {
     return { id: 'EE-' + n, date: dt, email: us.email, name: us.name, phone: '0771234567', address: { a1: '12 Galle Road', a2: '', city: 'Colombo', post: '00300' }, items, sub, disc: 0, code: '', ship, shipM: 'standard', wrap: 0, total: sub + ship, status, pay: 'Bank transfer', note: '', userId: us.id, log: [{ s: 'Placed', d: dt }] };
   };
   set<Order[]>('orders', [
-    mkO(1001, 40, u(1), 'Delivered', [it(1, 'Colour: Rose', 2, 450, '#D9638F'), it(13, 'Size: Small (150g) · Fragrance: Vanilla · Colour: White', 1, 1350, '#FFFFFF')]),
-    mkO(1002, 22, u(2), 'Delivered', [it(4, 'Colour: Lavender', 3, 450, '#C7B6E8')]),
-    mkO(1003, 9, u(3), 'Delivered', [it(16, 'Fragrance: Lavender · Colour: Sage', 2, 1550, '#B5C4A1'), it(1, 'Colour: Blush Pink', 1, 450, '#F7B9CE')]),
-    mkO(1004, 5, u(0), 'Dispatched', [it(4, 'Colour: Sky Blue', 2, 450, '#7FB7E6'), it(14, 'Size: Large (300g) · Fragrance: Unscented · Colour: Ocean Teal', 1, 2100, '#3FA7A3')]),
-    mkO(1005, 2, u(1), 'Processing', [it(17, 'Jar: Brown jar (white only) · Fragrance: Jasmine · Colour: White', 1, 1750, '#FFFFFF'), it(3, 'Colour: Red', 1, 550, '#D64545')]),
-    mkO(1006, 0, u(2), 'Processing', [it(4, 'Colour: Coral', 1, 450, '#F27D72')]),
+    mkO(1001, 40, u(1), 'Delivered', [it(1, 'Fragrance: Unscented · Colour: Rose', 2, 450, '#D9638F'), it(13, 'Size: Small (150g) · Fragrance: Vanilla · Colour: White', 1, 1250, '#FFFFFF')]),
+    mkO(1002, 22, u(2), 'Delivered', [it(4, 'Fragrance: Unscented · Colour: Lavender', 3, 450, '#C7B6E8')]),
+    mkO(1003, 9, u(3), 'Delivered', [it(16, 'Fragrance: Lavender · Colour: Sage', 2, 1450, '#B5C4A1'), it(1, 'Fragrance: Unscented · Colour: Blush Pink', 1, 450, '#F7B9CE')]),
+    mkO(1004, 5, u(0), 'Dispatched', [it(4, 'Fragrance: Unscented · Colour: Sky Blue', 2, 450, '#7FB7E6'), it(14, 'Size: Large (300g) · Fragrance: Unscented · Colour: Ocean Teal', 1, 2100, '#3FA7A3')]),
+    mkO(1005, 2, u(1), 'Processing', [it(17, 'Jar: Brown jar (white only) · Fragrance: Jasmine · Colour: White', 1, 1650, '#FFFFFF'), it(3, 'Fragrance: Unscented · Colour: Red', 1, 550, '#D64545')]),
+    mkO(1006, 0, u(2), 'Processing', [it(4, 'Fragrance: Unscented · Colour: Coral', 1, 450, '#F27D72')]),
   ]);
   set<Review[]>('reviews', [
     { id: 1, pid: 1, who: 'Amaya, Colombo', stars: 5, q: 'The rose candle is beautiful in person and the colour matched exactly what I picked.', date: '2026-09-10', approved: true },
@@ -209,7 +209,7 @@ function seed() {
     { id: 3, pid: 4, who: 'Dilini, Galle', stars: 5, q: 'Ordered a custom blend for my sister. She loved it.', date: '2026-09-22', approved: true },
     { id: 4, pid: 13, who: 'Sachini, Negombo', stars: 4, q: 'Lovely glass candle. Arrived well packed.', date: '2026-09-25', approved: true },
   ]);
-  set('seeded_v2', true);
+  set('seeded_v3', true);
 }
 seed();
 
