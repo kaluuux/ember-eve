@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useApp } from '../AppContext';
 import { go, useCurrentRoute } from '../router';
-import { get, isEmail, money, set } from '../store';
-import type { Subscriber } from '../types';
+import { money } from '../store';
 import { CartDrawer } from './CartDrawer';
 import { QuickViewModal } from './QuickViewModal';
+import { FloatingActions, Newsletter } from './Flair';
 
 /** Click (or hover on desktop) to open; closes on outside click, Escape, or choosing a link. */
 function NavDropdown({ label, active, children }: { label: string; active?: boolean; children: ReactNode }) {
@@ -27,9 +27,10 @@ function NavDropdown({ label, active, children }: { label: string; active?: bool
 }
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { settings, categories, liveSeasons, seasonal, cart, wish, user, setCartOpen, toast, flash, cookieAccepted, acceptCookie } = useApp();
+  const { settings, categories, liveSeasons, seasonal, cart, wish, user, setCartOpen, toast, cookieAccepted, acceptCookie } = useApp();
   const [hq, setHq] = useState('');
-  const [nl, setNl] = useState('');
+  const [scrolled, setScrolled] = useState(false);
+  const [bump, setBump] = useState(false);
   const r = useCurrentRoute();
   const onShop = r.name === 'shop';
   const seasonalMode = onShop && r.q.seasonal === '1';
@@ -37,23 +38,30 @@ export function Layout({ children }: { children: ReactNode }) {
   const here = (name: string) => (r.name === name ? { className: 'on', 'aria-current': 'page' as const } : {});
   const cartCount = cart.reduce((a, x) => a + x.qty, 0);
 
+  useEffect(() => {
+    const on = () => setScrolled(window.scrollY > 12);
+    on();
+    window.addEventListener('scroll', on, { passive: true });
+    return () => window.removeEventListener('scroll', on);
+  }, []);
+
+  // the basket button gives a little nudge whenever something is added
+  const prev = useRef(cartCount);
+  useEffect(() => {
+    if (cartCount > prev.current) { setBump(true); const t = window.setTimeout(() => setBump(false), 700); prev.current = cartCount; return () => window.clearTimeout(t); }
+    prev.current = cartCount;
+  }, [cartCount]);
+
   const doSearch = (e: FormEvent) => { e.preventDefault(); go('shop?q=' + encodeURIComponent(hq)); };
-  const doNews = (e: FormEvent) => {
-    e.preventDefault();
-    if (!isEmail(nl)) return flash('Enter a valid email');
-    set<Subscriber[]>('subscribers', get<Subscriber[]>('subscribers', []).concat({ email: nl, date: new Date().toISOString() }));
-    setNl('');
-    flash('Subscribed. Thank you.');
-  };
 
   return (
     <>
       <div className="shell">
-        <div className="topbar">Free delivery over {money(settings.freeOver)} · Hand-poured soy wax candles, made in Sri Lanka</div>
-        <header className="header">
-          <a href="#/" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <img src="/logo.png" alt="Ember & Eve" width={40} height={40} style={{ borderRadius: 9999 }} />
-            <span style={{ fontFamily: 'var(--serif)', fontSize: 20 }}>Ember &amp; Eve</span>
+        <div className="topbar">Free delivery over {money(settings.freeOver)}<span className="hide-sm"> · Hand-poured soy wax candles, made in Sri Lanka</span></div>
+        <header className={'header' + (scrolled ? ' scrolled' : '')}>
+          <a href="#/" className="brand">
+            <img src="/logo.png" alt="" width={42} height={42} style={{ borderRadius: 9999 }} />
+            <span>Ember &amp; Eve</span>
           </a>
           <nav className="nav" aria-label="Main">
             <a href="#/shop" {...((onShop && !inCollection && !r.q.season) || r.name === 'product' ? { className: 'on', 'aria-current': 'page' as const } : {})}>Shop</a>
@@ -61,47 +69,52 @@ export function Layout({ children }: { children: ReactNode }) {
               {categories.map((c) => <a key={c.id} role="menuitem" href={'#/shop?cat=' + c.id} {...(onShop && r.q.cat === c.id ? { className: 'on', 'aria-current': 'page' as const } : {})}>{c.name.replace(' Candles', '')}</a>)}
               {seasonal.length > 0 && <a role="menuitem" href="#/shop?seasonal=1" {...(seasonalMode ? { className: 'on', 'aria-current': 'page' as const } : {})}>Seasonal</a>}
             </NavDropdown>
-            {liveSeasons.map((x) => <a key={x.id} href={'#/shop?season=' + x.id} style={{ color: '#F2C9A0' }} {...(onShop && !seasonalMode && r.q.season === x.id ? { className: 'on', 'aria-current': 'page' as const } : {})}>{x.name.replace(' Collection', '')}</a>)}
+            {liveSeasons.map((x) => <a key={x.id} href={'#/shop?season=' + x.id} className={'season-link' + (onShop && !seasonalMode && r.q.season === x.id ? ' on' : '')} {...(onShop && !seasonalMode && r.q.season === x.id ? { 'aria-current': 'page' as const } : {})}>{x.name.replace(' Collection', '')}</a>)}
             <a href="#/gifts" {...here('gifts')}>Gift Box</a>
+            <a href="#/track" {...here('track')}>Track Order</a>
             <a href="#/about" {...here('about')}>About</a>
             <a href="#/contact" {...here('contact')}>Contact</a>
           </nav>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
             <form onSubmit={doSearch} style={{ margin: 0 }} role="search">
               <input className="search" name="hq" value={hq} onChange={(e) => setHq(e.target.value)} placeholder="Search candles" aria-label="Search candles" />
             </form>
             <a href={user ? '#/account' : '#/login'} style={{ fontSize: 14, fontWeight: 500 }}>{user ? 'Hi, ' + user.name.split(' ')[0] : 'Sign In'}</a>
-            <a href="#/account?tab=wish" style={{ fontSize: 14, fontWeight: 500 }}>Saved · {wish.length}</a>
-            <button type="button" className="basket-btn" onClick={() => setCartOpen(true)}>Basket · {cartCount}</button>
+            <a href="#/account?tab=wish" className="hide-sm" style={{ fontSize: 14, fontWeight: 500 }}>Saved · {wish.length}</a>
+            <button type="button" className={'basket-btn' + (bump ? ' bump' : '')} onClick={() => setCartOpen(true)}>Basket · {cartCount}</button>
           </div>
         </header>
 
-        <main style={{ flex: 1 }}>{children}</main>
+        <main style={{ flex: 1 }}><div key={r.name + '/' + r.arg} className="page-in">{children}</div></main>
 
         <footer className="footer">
-          <div style={{ maxWidth: 1120, margin: '0 auto', padding: '48px 24px 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 32, fontSize: 14 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ fontFamily: 'var(--serif)', fontSize: 20, color: '#fff' }}>Ember &amp; Eve</div>
-              <div>Light up your little moments.</div>
+          <div className="foot-main">
+            <div className="fbrand-col">
+              <div className="fbrand">Ember &amp; Eve</div>
+              <p>Light up your little moments. Hand-poured soy wax candles, made with care in Sri Lanka.</p>
+              <div className="fcontact">
+                {settings.email && <a href={'mailto:' + settings.email}>{settings.email}</a>}
+                {settings.whatsapp && <a href={'https://wa.me/' + settings.whatsapp} target="_blank" rel="noreferrer">WhatsApp +{settings.whatsapp}</a>}
+                {settings.pickupAddress && <span>{settings.pickupAddress}</span>}
+              </div>
             </div>
             <FooterCol title="Shop" links={[['All Candles', '/shop'], ['Gift Box', '/gifts'], ['Colour Finder', '/finder']]} />
             <FooterCol title="Help" links={[['FAQ', '/faq'], ['Shipping and Returns', '/shipping'], ['Candle Care', '/care'], ['Track Order', '/track'], ['Contact', '/contact']]} />
             <FooterCol title="Company" links={[['About', '/about'], ['Privacy Policy', '/privacy'], ['Terms', '/terms'], ['Staff Login', '/admin']]} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ color: '#fff', fontWeight: 600 }}>Newsletter</div>
+            <div className="fcol">
+              <div className="ftitle">The circle</div>
               <div>New collections and offers, once a month.</div>
-              <form onSubmit={doNews} style={{ display: 'flex', gap: 8, margin: 0 }}>
-                <input name="nl" value={nl} onChange={(e) => setNl(e.target.value)} placeholder="Email" aria-label="Email for newsletter" style={{ flex: 1, minWidth: 0, padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: 14 }} />
-                <button type="submit" style={{ font: '600 14px Inter', padding: '8px 16px', borderRadius: 8, border: 'none', background: '#A67C52', color: '#1B1D1F', cursor: 'pointer' }}>Join</button>
-              </form>
+              <Newsletter light />
             </div>
           </div>
-          <div style={{ maxWidth: 1120, margin: '0 auto', padding: '16px 24px 24px', borderTop: '1px solid rgba(255,255,255,0.1)', fontSize: 12, color: '#CDBFB1' }}>
-            © 2026 Ember &amp; Eve. Secure checkout · 30-day returns
+          <div className="foot-base">
+            <span>© 2026 Ember &amp; Eve</span>
+            <span>Pay by bank transfer or LankaQR · Delivery across Sri Lanka</span>
           </div>
         </footer>
       </div>
 
+      <FloatingActions />
       <CartDrawer />
       <QuickViewModal />
       {toast && <div className="toast" role="status">{toast}</div>}
@@ -117,8 +130,8 @@ export function Layout({ children }: { children: ReactNode }) {
 
 function FooterCol({ title, links }: { title: string; links: [string, string][] }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ color: '#fff', fontWeight: 600 }}>{title}</div>
+    <div className="fcol">
+      <div className="ftitle">{title}</div>
       {links.map(([l, h]) => <a key={h} href={'#' + h}>{l}</a>)}
     </div>
   );

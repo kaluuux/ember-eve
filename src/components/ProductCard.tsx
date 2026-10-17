@@ -3,7 +3,8 @@ import type { Product } from '../types';
 import { useApp } from '../AppContext';
 import { go } from '../router';
 import { money } from '../store';
-import { defaultSelection, fromListPrice, inStock, lowestPrice, normalize, ratingOf } from '../commerce';
+import { defaultSelection, fromListPrice, inStock, lowestPrice, normalize, ratingOf, soft } from '../commerce';
+import { Ico } from './Flair';
 
 const DOTS = 7;
 
@@ -23,14 +24,17 @@ export function ProductCard({ p }: { p: Product }) {
 
   return (
     <article className="pcard">
-      <a href={href} className="ph stripe thumb" style={{ background: hex }}>
-        <span className="badge-row">
-          {p.salePct > 0 && <span className="tagpill sale">-{p.salePct}%</span>}
-          {isNew && <span className="tagpill new">New</span>}
-          {sold && <span className="badge">Sold out</span>}
-        </span>
-        <span>Image: {p.name}</span>
-      </a>
+      <div className="thumb-wrap">
+        <a href={href} className="ph stripe thumb" style={{ backgroundColor: soft(hex) }} aria-label={p.name}>
+          <span className="badge-row">
+            {p.salePct > 0 && <span className="tagpill sale">-{p.salePct}%</span>}
+            {isNew && <span className="tagpill new">New</span>}
+            {sold && <span className="badge">Sold out</span>}
+          </span>
+          <span>Image: {p.name}</span>
+        </a>
+        <button type="button" className="heart" aria-pressed={saved} aria-label={saved ? 'Remove from saved' : 'Save ' + p.name} onClick={() => toggleWish(p.id)}><Ico n="heart" /></button>
+      </div>
       <div style={{ padding: '0 4px', display: 'flex', flexDirection: 'column', gap: 6 }}>
         {cat && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--brown)' }}>{cat}</div>}
         <a href={href} className="name">{p.name}</a>
@@ -50,13 +54,10 @@ export function ProductCard({ p }: { p: Product }) {
           From {money(from)}{p.salePct > 0 && <s style={{ marginLeft: 8, fontSize: 13, fontWeight: 400, color: 'var(--muted2)' }}>{money(was)}</s>}
         </div>
         <div className="acts">
-          <button type="button" onClick={() => toggleWish(p.id)} aria-pressed={saved} className="btn-xs" style={{ padding: '10px 12px', borderColor: saved ? 'var(--brown)' : undefined, background: saved ? 'var(--cream)' : undefined }}>
-            {saved ? 'Saved' : 'Save'}
-          </button>
           <button
             type="button"
             className="btn"
-            style={{ fontWeight: 500, fontSize: 14, padding: '10px 12px' }}
+            style={{ fontWeight: 600, fontSize: 14, padding: '11px 14px' }}
             onClick={() => (sold ? go('product/' + p.id) : setQv({ id: p.id, sel: normalize(p, { color: cur }, colors) }))}
           >
             {sold ? 'View' : 'Customise'}

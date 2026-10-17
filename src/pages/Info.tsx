@@ -2,17 +2,16 @@ import { useState } from 'react';
 import { useApp } from '../AppContext';
 import { ErrorText, Field, Ph, useForm } from '../components/ui';
 import { WhatsInside } from './Home';
-import { get, isEmail, money, set, setLocal } from '../store';
+import { get, isEmail, money, set } from '../store';
 import { remote } from '../remote';
-import { fetchOrder, sendMessage } from '../sync';
-import { go } from '../router';
-import type { Message, Order } from '../types';
+import { sendMessage } from '../sync';
+import type { Message } from '../types';
 
 const PROCESS = [
-  { n: 1, t: 'Melt', d: 'Soy and coconut wax is heated to 82°C and held.' },
-  { n: 2, t: 'Blend', d: 'Fragrance oil is added at 8% by weight and stirred for 3 minutes.' },
-  { n: 3, t: 'Pour', d: 'Wax is poured by hand at 58°C into jars and moulds.' },
-  { n: 4, t: 'Cure', d: 'Candles rest for 14 days before they are wrapped and dispatched.' },
+  { n: 1, t: 'Melt', d: 'High quality soy wax is melted gently and held at the right temperature.' },
+  { n: 2, t: 'Blend', d: 'Your chosen fragrance, if you picked one, and your colours are stirred in.' },
+  { n: 3, t: 'Pour', d: 'Each candle is poured by hand, with care and attention to detail, into moulds, glass or jars.' },
+  { n: 4, t: 'Set', d: 'Candles rest until they are fully set, then we finish, wrap and send them to you.' },
 ];
 
 export function About() {
@@ -22,8 +21,9 @@ export function About() {
         <div className="layout-half" style={{ alignItems: 'center' }}>
           <div>
             <h1 className="h1" style={{ marginBottom: 16 }}>About Ember &amp; Eve</h1>
-            <p style={{ fontSize: 16, lineHeight: '24px', color: 'var(--text2)', margin: '0 0 12px' }}>Light up your little moments. Every candle is poured by hand in small batches, then left to cure before it is wrapped for you.</p>
-            <p style={{ fontSize: 16, lineHeight: '24px', color: 'var(--text2)', margin: 0 }}>We pour every candle by hand in Sri Lanka, using high quality soy wax that is non-toxic and gentle on your home. Replace this text with your own story.</p>
+            <p style={{ fontSize: 16, lineHeight: '24px', color: 'var(--text2)', margin: '0 0 12px' }}>Light up your little moments. Ember &amp; Eve makes hand-poured candles in Sri Lanka, in small batches and with proper care for every single one.</p>
+            <p style={{ fontSize: 16, lineHeight: '24px', color: 'var(--text2)', margin: '0 0 12px' }}>We use high quality soy wax that is non-toxic and gentle on your home. Choose a sculpted mold candle, a glass candle or a jar candle, pick your colour from our palette or blend your own, and add a fragrance if you like.</p>
+            <p style={{ fontSize: 16, lineHeight: '24px', color: 'var(--text2)', margin: 0 }}>Giving a gift? Create your own gift box, add a personal note, or add a message on the sticker of a glass or jar candle. Through the year we also pour seasonal collections for Halloween, Christmas, Valentine and the traditional festive season.</p>
           </div>
           <Ph tint="#EADFD3" label="the maker at work" ratio="4/3" style={{ borderRadius: 16, border: '1px solid var(--line)' }} />
         </div>
@@ -52,6 +52,7 @@ export function Contact() {
 
   const submit = async () => {
     if (!str('cname').trim() || !isEmail(str('cemail')) || !str('cmsg').trim()) { setOk(''); return setErr('Please complete all fields with a valid email.'); }
+    if (str('website')) { setF({}); return setOk('Thank you. We will reply within 2 working days.'); } // honeypot: bots fill the hidden field
     const msg = { name: str('cname'), email: str('cemail'), text: str('cmsg'), date: new Date().toISOString() };
     if (remote) {
       try { await sendMessage(msg); } catch { setOk(''); return setErr('Could not send your message. Please try again.'); }
@@ -72,6 +73,9 @@ export function Contact() {
             <Field label="Name" {...bind('cname')} />
             <Field label="Email" type="email" {...bind('cemail')} />
             <Field label="Message" {...bind('cmsg')} rows={5} />
+            <div aria-hidden="true" style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }}>
+              <label>Website<input name="website" tabIndex={-1} autoComplete="off" value={str('website')} onChange={(e) => setF((t) => ({ ...t, website: e.target.value }))} /></label>
+            </div>
           </div>
           <ErrorText>{err}</ErrorText>
           <div><button type="submit" className="btn" onClick={submit}>Send Message</button></div>
@@ -79,10 +83,9 @@ export function Contact() {
         <div className="card stack" style={{ gap: 12, fontSize: 14, lineHeight: '22px' }}>
           <div className="h3">Get in touch</div>
           <div><b>Email</b><br />{settings.email}</div>
-          <div><b>Phone</b><br />01234 567890</div>
-          <div><b>Hours</b><br />Monday to Friday, 9am to 5pm</div>
-          <div><b>Studio</b><br />Address to be added</div>
-          <Ph tint="#EADFD3" ratio="16/9" style={{ padding: 8, color: 'var(--muted)' }}>Map placeholder</Ph>
+          {settings.whatsapp && <div><b>WhatsApp</b><br /><a href={'https://wa.me/' + settings.whatsapp} target="_blank" rel="noreferrer">Message us</a></div>}
+          {settings.pickupAddress && <div><b>Store pickup</b><br />{settings.pickupAddress}</div>}
+          <div className="muted">We usually reply within 2 working days.</div>
         </div>
       </div>
     </section>
@@ -90,12 +93,15 @@ export function Contact() {
 }
 
 const FAQS = [
-  { q: 'How long do the candles burn?', a: 'Burn time depends on size, from around 16 hours for an 80g butterfly to 60 hours for a 300g jar.' },
-  { q: 'What wax do you use?', a: 'Soy wax, or a coconut-soy blend. You can choose on each product page.' },
-  { q: 'Can I send a candle as a gift?', a: 'Yes. Add a gift message at checkout, choose gift wrap, or build a three-candle gift set.' },
-  { q: 'Where do you deliver?', a: 'We deliver across Sri Lanka, and you can also collect from our store.' },
-  { q: 'Can I change or cancel my order?', a: 'Contact us within 2 hours of ordering and we will update it before it is poured and packed.' },
-  { q: 'Are the candles safe for pets?', a: 'We use phthalate-free fragrance oils, but keep all candles and flames out of reach of pets.' },
+  { q: 'How long do the candles burn?', a: 'Burn time depends on the size and shape: larger candles burn longer. Soy wax burns slowly and evenly. Follow our candle care tips for the best result.' },
+  { q: 'What wax do you use?', a: 'High quality soy wax, which is non-toxic and burns cleanly. Every candle is poured by hand.' },
+  { q: 'Can I choose the colour?', a: 'Yes. Pick from our colour palette, or choose a custom blend of two or more colours. Some options, like the brown jar, come in white wax only.' },
+  { q: 'Can I add a message to my candle?', a: 'Glass and jar candles have a sticker around them. Tick the sticker option on the product page to add a short message or quote, free of charge.' },
+  { q: 'Can I send a candle as a gift?', a: 'Yes. Create your own gift box with a personal note, add gift wrap at checkout, or add a gift message for the packing slip.' },
+  { q: 'How do I pay?', a: 'Pay by bank transfer using your order number as the reference, then upload your receipt on the order page or send it to us on WhatsApp. We check it, approve your payment and start pouring.' },
+  { q: 'Where do you deliver?', a: 'We deliver across Sri Lanka. Delivery is charged by area and is free over a minimum order value shown at checkout. Store pickup is available if the shop offers it.' },
+  { q: 'Can I change or cancel my order?', a: 'Contact us as soon as you can. We can update or cancel an order before it is poured.' },
+  { q: 'Are the candles safe for pets?', a: 'Keep all candles and flames out of reach of children and pets, and never leave a burning candle unattended.' },
 ];
 
 export function Faq() {
@@ -122,24 +128,25 @@ export function Doc({ name }: { name: string }) {
   const { settings: st } = useApp();
   const docs: Record<string, { title: string; sections: { h: string; t: string }[] }> = {
     shipping: { title: 'Shipping and Returns', sections: [
-      { h: 'Delivery', t: 'Standard delivery takes 3 to 5 working days and costs ' + money(st.standard) + '. Orders over ' + money(st.freeOver) + ' ship free. Express next working day delivery costs ' + money(st.express) + '.' },
-      { h: 'Dispatch', t: 'Orders placed before 1pm on a working day are dispatched the same day. Candles are packed in recycled, protective packaging.' },
-      { h: 'Returns', t: 'Unused candles can be returned within 30 days for a full refund. Contact us for a returns label. Damaged items are replaced at no cost.' },
+      { h: 'Delivery', t: 'Standard delivery is ' + money(st.standard) + ' (some districts have their own rate, shown at checkout) and is free for orders over ' + money(st.freeOver) + '. Express delivery is ' + money(st.express) + '.' + (st.pickupAddress ? ' You can also collect your order from our store.' : '') },
+      { h: 'Making and dispatch', t: 'Every candle is hand-poured to order in the colours and options you choose, so please allow a few days for pouring and setting before we dispatch. We start once your payment is approved.' },
+      { h: 'Damaged or incorrect items', t: 'Because each candle is made to order, we cannot accept returns for a change of mind. If your candle arrives damaged or not as you ordered, contact us within 48 hours with a photo and we will make it right.' },
     ] },
     care: { title: 'Candle Care', sections: [
-      { h: 'First burn', t: 'Let the wax melt to the edge of the jar on the first burn, usually 2 to 3 hours. This sets the melt pool and prevents tunnelling.' },
+      { h: 'First burn', t: 'Let the wax melt to the edge of the container on the first burn, usually 2 to 3 hours. This sets an even melt pool and prevents tunnelling.' },
       { h: 'Wick', t: 'Trim the wick to 5mm before every burn. Remove any debris from the wax.' },
       { h: 'Safety', t: 'Never leave a burning candle unattended. Keep away from children, pets and draughts. Stop burning when 1cm of wax remains.' },
     ] },
     privacy: { title: 'Privacy Policy', sections: [
-      { h: 'What we collect', t: 'Name, email, delivery address and order history, used only to process and deliver your orders and to contact you about them.' },
+      { h: 'What we collect', t: 'Your name, email, phone number, delivery address, order history, and any payment receipt you upload. We use it only to take payment, make and deliver your order, and contact you about it.' },
+      { h: 'Who sees it', t: 'Only our team. Your details are stored with our hosting provider, Supabase, and we never sell them.' },
       { h: 'Cookies', t: 'We store your basket and sign-in on your device. We do not run advertising trackers.' },
       { h: 'Your rights', t: 'You can ask us to export or delete your data at any time by contacting ' + (st.email || 'us') + '.' },
     ] },
     terms: { title: 'Terms of Sale', sections: [
-      { h: 'Orders', t: 'An order is accepted when we send a dispatch confirmation. We may cancel and refund an order if an item is out of stock.' },
-      { h: 'Pricing', t: 'Prices are in pounds sterling and include VAT where applicable. Delivery is charged at checkout.' },
-      { h: 'Returns', t: 'See the Shipping and Returns page for how to return an item.' },
+      { h: 'Orders', t: 'An order is confirmed once we have checked and approved your payment. We may cancel and refund an order if an item cannot be made or is out of stock.' },
+      { h: 'Pricing', t: 'Prices are in Sri Lankan rupees (LKR). Delivery is charged at checkout. The total you see at checkout is the total you pay.' },
+      { h: 'Made to order', t: 'Candles are made to order in your chosen colours and options. See Shipping and Returns for what we do if something goes wrong.' },
     ] },
   };
   const doc = docs[name];
@@ -158,38 +165,6 @@ export function Doc({ name }: { name: string }) {
   );
 }
 export const DOC_KEYS = ['shipping', 'care', 'privacy', 'terms'];
-
-export function Track() {
-  const { bind, str } = useForm();
-  const [err, setErr] = useState('');
-
-  const submit = async () => {
-    let o = get<Order[]>('orders', []).find((x) => x.id.toLowerCase() === str('tkid').trim().toLowerCase() && x.email.toLowerCase() === str('tkemail').trim().toLowerCase());
-    if (!o && remote) {
-      o = (await fetchOrder(str('tkid'), str('tkemail'))) ?? undefined;
-      if (o) setLocal('orders', get<Order[]>('orders', []).filter((x) => x.id !== o!.id).concat(o));
-    }
-    if (!o) return setErr('We could not find that order. Check the number and email.');
-    const mine = get<string[]>('myorders', []);
-    if (!mine.includes(o.id)) set('myorders', mine.concat(o.id));
-    go('order/' + o.id);
-  };
-
-  return (
-    <section className="narrow" style={{ maxWidth: 480 }}>
-      <form className="card stack" style={{ gap: 16 }} onSubmit={(e) => e.preventDefault()} noValidate>
-        <h1 className="h1">Track Your Order</h1>
-        <p className="muted" style={{ margin: 0 }}>Enter the order number from your confirmation email, for example EE-1004.</p>
-        <div className="fields one">
-          <Field label="Order number" {...bind('tkid')} placeholder="EE-1004" />
-          <Field label="Email" type="email" {...bind('tkemail')} />
-        </div>
-        <ErrorText>{err}</ErrorText>
-        <button type="submit" className="btn" onClick={submit}>Track Order</button>
-      </form>
-    </section>
-  );
-}
 
 export function NotFound() {
   return (

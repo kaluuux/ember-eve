@@ -1,7 +1,6 @@
 # Ember & Eve
 
-Storefront and admin for Ember & Eve hand-poured candles. Implements the Claude Design handoff
-(`Ember and Eve.dc.html`, `Admin.dc.html`) as a Vite + React + TypeScript SPA.
+Storefront and admin for hand-poured soy wax candles (Sri Lanka). Vite + React + TypeScript SPA with a Supabase backend.
 
 ```bash
 npm install
@@ -9,35 +8,56 @@ npm run dev        # http://localhost:5173
 npm run build      # type-check + production build into dist/
 ```
 
-> The scripts call `node ./node_modules/...` directly because this folder's name contains `&`,
-> which breaks `npx` / bare binary names under `cmd.exe`. Renaming the folder to `ember-eve` is the simpler long-term fix.
+## Two modes
+
+- **Online (Supabase configured):** catalogue, orders, receipts, customers and admin sign-in live in Supabase and are shared by everyone.
+- **Offline demo (no env vars):** everything runs on `localStorage` with sample data. Handy for trying things; edits are not shared.
+
+Copy `.env.example` to `.env.local` and fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (the publishable key; never put the `service_role` key anywhere in this project). On Vercel add the same two variables for Production and Preview, then redeploy.
+
+## Setting up Supabase
+
+1. Run `supabase/schema.sql` in the SQL Editor (safe to re-run after every update; it also upgrades older versions).
+2. Authentication > Users > Add user: create the first admin login, then run `insert into admins (email) values ('you@example.com');`. More admins can be added later in Admin > Settings > Admin team.
+3. Authentication > Providers > Email: for simple sign-up turn **Confirm email** off, or set up your own SMTP so confirmation and password-reset emails are reliable (Supabase's built-in sender is heavily rate limited).
+4. Authentication > URL Configuration: set the Site URL to your live address, and add your live address, Vercel preview addresses and `http://localhost:5173/**` under Redirect URLs (needed for password-reset links and Google sign-in).
+5. **Google sign-in (optional but recommended).** In Google Cloud Console > APIs & Services > Credentials, create an *OAuth client ID* of type *Web application* and add `https://<your-project-ref>.supabase.co/auth/v1/callback` as an authorised redirect URI. Copy the Client ID and Secret into Supabase > Authentication > Providers > Google and switch it on. The "Continue with Google" buttons appear automatically when the app is connected to Supabase.
+6. Open `/#/admin`, sign in, and on **Catalogue** click **Publish starter catalogue**.
+7. In **Settings** add your bank accounts (each can have its own LankaQR image), WhatsApp number, pickup address and delivery rates. Customers pick their bank, then see its QR and details.
+8. In **Settings > Phone alerts** click **Turn on phone alerts**, install the free ntfy app, and subscribe to the topic shown. You then get a push for every new order and uploaded receipt (sent by the database through ntfy.sh; needs the `pg_net` extension, which Supabase enables by default).
+
+## Customers and accounts
+
+- Checkout asks signed-out visitors to **sign in, create an account, or continue as a guest**. Google or email + password both work.
+- Signed-in customers have an **address book**: pick a saved address at checkout, or add one and tick "Save this address". Their **account page** shows total orders, orders in progress, total spent, current and past orders (with Track, Invoice and Buy again), saved addresses, saved candles and their profile.
+- A guest who later creates an account with the same **verified** email sees their earlier orders there.
+- **Track Order** (`#/track`) needs no account: a mobile number plus an order number or courier tracking number. It shows status only, never the email, street address or prices, and guessing is rate limited.
+- In Admin, **Customers** opens a panel with contact details, totals, saved addresses and every order, and each order has a private **internal note** customers never see.
+
+## Look and feel
+
+The storefront has a calm, warm design layer in `src/theme.css` (colours, type, buttons, motion) on top of the base styles in `src/index.css`. Headings use Cormorant Garamond; body text uses Inter. Motion is gentle and respects "reduce motion": scroll reveals, soft hover lifts, a candle-lighting hero, an interactive Colour Studio, floating embers, and a basket nudge when you add something. Newsletter sign-ups are stored in Supabase and listed in Admin > Customers (Newsletter list).
+
+## How an order works
+
+1. The browser sends only the customer's choices (candle, options, colours, notes). The server (`place_order`) prices everything from the live catalogue, checks stock, applies the discount and delivery rate, and returns the final order. Checkout shows the server's totals before the customer pays.
+2. Payment is by bank transfer: the order page shows your account details and the order number as reference. The customer uploads a receipt photo (private storage) or sends it on WhatsApp.
+3. In **Orders** you see the receipt and which bank the customer chose, **Approve payment**, add courier and tracking, and move the order through Processing > Dispatched > Delivered.
+4. Every order has a printable invoice (`#/invoice/EE-1007`): customers open it from their order page, you open it from the order in Admin. Fill in the invoice details (business address, phone, registration number, due days) in Settings > Store details. To use your own artwork on the invoice, put `invoice-logo.png` (the candle mark, top right) and `invoice-wordmark.png` (name and tagline, bottom right) in `public/`; without them the shop logo and a text wordmark are used.
 
 ## Routes (hash-based)
 
-`#/` home · `#/shop` · `#/product/:id` · `#/cart` · `#/checkout` · `#/order/:id` · `#/login` · `#/register` ·
-`#/forgot` · `#/account` · `#/track` · `#/gifts` · `#/finder` · `#/about` · `#/contact` · `#/faq` ·
-`#/shipping` · `#/care` · `#/privacy` · `#/terms` · `#/admin[/dash|orders|products|customers|discounts|reviews|messages|settings]`
+`#/` home · `#/shop` (`?cat=` `?shelf=` `?season=` `?seasonal=1` `?q=`) · `#/product/:id` · `#/cart` · `#/checkout` · `#/order/:id` · `#/login` · `#/register` · `#/forgot` · `#/reset` · `#/account` · `#/track` · `#/gifts` · `#/finder` · `#/about` · `#/contact` · `#/faq` · `#/shipping` · `#/care` · `#/privacy` · `#/terms` · `#/admin[/dash|orders|products|catalog|discounts|customers|reviews|messages|settings]`
 
-## Demo data and logins
-
-All data lives in `localStorage` (keys prefixed `ee_`), seeded on first load by `src/store.ts`.
-
-- Customer: `demo@emberandeve.example` / `candle123`
-- Admin (`#/admin`): `admin@emberandeve.example` / `admin123`
-- Discount codes: `WELCOME10`, `EVE5` (min £20), `FREESHIP`
-
-To reset, clear site data for the origin.
+Offline demo logins: customer `demo@emberandeve.example` / `candle123`, admin `admin@emberandeve.example` / `admin123`.
 
 ## Layout
 
-- `src/store.ts` – localStorage data layer, seed data, `useStored` reactive hook (swap for an API client later)
-- `src/AppContext.tsx` – cart, wishlist, session, toast, quick view
-- `src/commerce.ts` – totals, ratings, order view helpers
-- `src/components/` – layout shell, scroll-driven `Hero`, product card, basket drawer, quick view
-- `src/pages/` – storefront pages · `src/admin/` – admin shell and views
+- `src/store.ts` data layer (localStorage cache, starter catalogue) · `src/sync.ts` Supabase sync, accounts, orders, receipts, admin team, backup
+- `src/commerce.ts` pricing, options, shelves, seasons · `src/AppContext.tsx` cart, session, discounts
+- `src/pages/` storefront · `src/admin/` admin (`dashboard`, `orders`, `catalog`, `settings`, `views`)
+- `supabase/schema.sql` tables, security rules and server functions
 
-## Before going live
+## Backups
 
-This is a prototype backend: passwords, the admin login and "payments" are all client-side and unverified.
-A real deployment needs a server for auth (hashed passwords), orders, stock and a payment provider.
-Photography is still placeholder blocks, as in the design.
+Admin > Settings > Backup downloads everything (catalogue, orders, customers, reviews, messages) as one file. Keep it private. Receipt photos stay in Supabase Storage. Supabase's own automatic backups need a paid plan.

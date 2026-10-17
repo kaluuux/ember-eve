@@ -8,12 +8,14 @@ import { Product } from './pages/Product';
 import { Cart } from './pages/Cart';
 import { Checkout } from './pages/Checkout';
 import { Order } from './pages/Order';
-import { Forgot, Login, Register } from './pages/Auth';
+import { Forgot, Login, Register, Reset } from './pages/Auth';
 import { Account } from './pages/Account';
 import { Gifts } from './pages/Gifts';
 import { Finder } from './pages/Finder';
-import { About, Contact, DOC_KEYS, Doc, Faq, NotFound, Track } from './pages/Info';
+import { About, Contact, DOC_KEYS, Doc, Faq, NotFound } from './pages/Info';
+import { Track } from './pages/Track';
 import { Admin } from './admin/Admin';
+import { Invoice } from './pages/Invoice';
 
 function Page({ route }: { route: Route }) {
   const { setCartOpen, setQv } = useApp();
@@ -28,10 +30,11 @@ function Page({ route }: { route: Route }) {
     case 'checkout': return <Checkout />;
     case 'order': return <Order route={route} />;
     case 'login': return <Login route={route} />;
-    case 'register': return <Register />;
+    case 'register': return <Register route={route} />;
     case 'forgot': return <Forgot />;
+    case 'reset': return <Reset />;
     case 'account': return <Account route={route} />;
-    case 'track': return <Track />;
+    case 'track': return <Track route={route} />;
     case 'gifts': return <Gifts />;
     case 'finder': return <Finder />;
     case 'about': return <About />;
@@ -44,6 +47,7 @@ function Page({ route }: { route: Route }) {
 export default function App() {
   const route = useRoute();
   if (route.name === 'admin') return <Admin route={route} />;
+  if (route.name === 'invoice') return <AppProvider><Invoice route={route} /></AppProvider>;
   return (
     <AppProvider>
       <Layout>

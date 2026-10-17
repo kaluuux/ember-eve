@@ -1,208 +1,101 @@
-import { useState, type ReactNode } from 'react';
-import { EMPTY, STATUS_COLORS, DEFAULT_SETTINGS, fmtDate, get, money, set, useStored } from '../store';
+import { useMemo, useState, type ReactNode } from 'react';
+import { EMPTY, addressBook, fmtDate, get, money, set, useStored } from '../store';
+import { PageHead, StatusBadge, downloadCsv, waLink } from './ui';
 import { Chip, ErrorText, Field, useForm } from '../components/ui';
-import { go } from '../router';
-import { remote } from '../remote';
-import type { Discount, Message, Order, OrderStatus, Product, Review, Settings, User } from '../types';
-import { lineText, orderView } from '../commerce';
+import type { Discount, Message, Order, Product, Review, User } from '../types';
 
 type Flash = (m: string) => void;
 
-const H1 = ({ children }: { children: ReactNode }) => <h1 className="h1" style={{ marginBottom: 16 }}>{children}</h1>;
-const Status = ({ status }: { status: OrderStatus }) => {
-  const [bg, fg] = STATUS_COLORS[status] ?? STATUS_COLORS.Processing;
-  return <span className="tag" style={{ background: bg, color: fg }}>{status}</span>;
-};
-
-/* ------------------------------------------------------------------ Dashboard */
-export function Dashboard() {
-  const orders = useStored<Order[]>('orders', EMPTY);
-  const products = useStored<Product[]>('products', EMPTY);
-  const users = useStored<User[]>('users', EMPTY);
-
-  const live = orders.filter((o) => o.status !== 'Cancelled');
-  const rev = live.reduce((a, o) => a + o.total, 0);
-  const pending = orders.filter((o) => o.status === 'Processing').length;
-  const days = [...Array(7)].map((_, i) => {
-    const d = new Date(Date.now() - (6 - i) * 86400000);
-    return { key: d.toDateString(), d: d.toLocaleDateString('en-GB', { weekday: 'short' }) };
-  });
-  const dv = days.map((d) => ({ d: d.d, v: live.filter((o) => new Date(o.date).toDateString() === d.key).reduce((a, o) => a + o.total, 0) }));
-  const mx = Math.max(1, ...dv.map((x) => x.v));
-  const lows: { name: string; stock: string; color: string }[] = [];
-  products.forEach((p) => {
-    if (p.stock !== null && p.stock <= 5) lows.push({ name: p.name, stock: p.stock === 0 ? 'Sold out' : p.stock + ' left', color: p.stock === 0 ? 'var(--red)' : 'var(--amber)' });
-  });
-  const units: Record<string, number> = {};
-  live.forEach((o) => o.items.forEach((i) => { const k = i.name.split(',')[0]; units[k] = (units[k] || 0) + i.qty; }));
-  const top = Object.keys(units).sort((a, b) => units[b] - units[a]).slice(0, 5);
-  const kpis = [
-    { l: 'Revenue', v: money(rev), s: 'excluding cancelled' },
-    { l: 'Orders', v: String(orders.length), s: pending + ' to process' },
-    { l: 'Average order', v: money(live.length ? rev / live.length : 0), s: 'per order' },
-    { l: 'Customers', v: String(users.length), s: 'registered' },
-  ];
-  const row = { display: 'flex', justifyContent: 'space-between', fontSize: 14, padding: '8px 0', borderBottom: '1px solid rgba(60,30,10,0.08)' } as const;
-
-  return (
-    <>
-      <H1>Dashboard</H1>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16, marginBottom: 24 }}>
-        {kpis.map((k) => (
-          <div key={k.l} className="card" style={{ padding: 16 }}>
-            <div className="muted">{k.l}</div>
-            <div style={{ fontSize: 28, fontWeight: 700, marginTop: 4 }}>{k.v}</div>
-            <div style={{ fontSize: 12, color: 'var(--muted2)' }}>{k.s}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: 16, alignItems: 'start' }}>
-        <div className="card">
-          <div className="h3" style={{ marginBottom: 16 }}>Revenue, last 7 days</div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, height: 160 }}>
-            {dv.map((b, i) => (
-              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', gap: 4, height: '100%' }}>
-                <div style={{ fontSize: 11, color: 'var(--muted)' }}>{b.v ? money(b.v) : ''}</div>
-                <div style={{ width: '100%', borderRadius: '4px 4px 0 0', background: 'var(--brown)', height: Math.max(2, Math.round((b.v / mx) * 110)) }} />
-                <div style={{ fontSize: 12, color: 'var(--muted2)' }}>{b.d}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="card">
-          <div className="h3" style={{ marginBottom: 12 }}>Low stock</div>
-          {lows.length === 0 && <div className="muted">Everything is well stocked.</div>}
-          {lows.map((l, i) => <div key={i} style={row}><span>{l.name}</span><span style={{ fontWeight: 600, color: l.color }}>{l.stock}</span></div>)}
-        </div>
-        <div className="card">
-          <div className="h3" style={{ marginBottom: 12 }}>Top sellers</div>
-          {top.map((k) => <div key={k} style={row}><span>{k}</span><span style={{ fontWeight: 600 }}>{units[k]} sold</span></div>)}
-        </div>
-        <div className="card">
-          <div className="h3" style={{ marginBottom: 12 }}>Recent orders</div>
-          {orders.slice(-5).reverse().map((o) => (
-            <button key={o.id} type="button" onClick={() => go('admin/orders?sel=' + o.id)} style={{ ...row, width: '100%', gap: 8, font: '400 14px Inter', border: 'none', borderBottom: row.borderBottom, background: 'none', cursor: 'pointer', textAlign: 'left' }}>
-              <span>{o.id} · {o.name}</span><span style={{ fontWeight: 600 }}>{money(o.total)}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-    </>
-  );
-}
-
-/* --------------------------------------------------------------------- Orders */
-const STATUS_FILTERS = ['All', 'Processing', 'Dispatched', 'Delivered', 'Cancelled'] as const;
-
-export function OrdersView({ sel, flash }: { sel: string; flash: Flash }) {
-  const orders = useStored<Order[]>('orders', EMPTY);
-  const [fil, setFil] = useState<(typeof STATUS_FILTERS)[number]>('All');
-  const [search, setSearch] = useState('');
-  const q = search.toLowerCase();
-  const rows = orders.slice().reverse().filter((o) => (fil === 'All' || o.status === fil) && (!q || (o.id + o.name + o.email).toLowerCase().includes(q)));
-  const selO = orders.find((o) => o.id === sel);
-  const ord = selO ? orderView(selO) : null;
-
-  const setStatus = (id: string, st: OrderStatus) => {
-    const list = get<Order[]>('orders', []), products = get<Product[]>('products', []), iso = new Date().toISOString();
-    const o = list.find((x) => x.id === id);
-    if (!o) return;
-    if (st === 'Cancelled') {
-      o.items.forEach((i) => {
-        if (!i.pid) return;
-        const p = products.find((x) => x.id === i.pid);
-        if (p && p.stock !== null) p.stock += i.qty;
-      });
-    }
-    o.status = st;
-    o.log = (o.log || []).concat({ s: st, d: iso });
-    set('orders', list); set('products', products);
-    flash('Order ' + id + ': ' + st);
-  };
-  const next = selO ? ({ Processing: 'Dispatched', Dispatched: 'Delivered' } as Partial<Record<OrderStatus, OrderStatus>>)[selO.status] : undefined;
-  const canCancel = selO && (selO.status === 'Processing' || selO.status === 'Dispatched');
-
-  return (
-    <>
-      <H1>Orders</H1>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
-        {STATUS_FILTERS.map((c) => <Chip key={c} size="pill" on={fil === c} onClick={() => setFil(c)}>{c}</Chip>)}
-        <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search order, name, email" aria-label="Search orders" style={{ width: 260, padding: '8px 12px' }} />
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: ord ? 'repeat(auto-fit,minmax(320px,1fr))' : '1fr', gap: 16, alignItems: 'start' }}>
-        <div className="card flush" style={{ overflowX: 'auto', gridColumn: ord ? 'span 2' : undefined }}>
-          <table className="table">
-            <thead><tr><th>Order</th><th>Date</th><th>Customer</th><th>Total</th><th>Status</th></tr></thead>
-            <tbody>
-              {rows.map((o) => (
-                <tr key={o.id} className="click" onClick={() => go('admin/orders?sel=' + o.id)} style={{ background: sel === o.id ? 'var(--cream)' : undefined }}>
-                  <td style={{ fontWeight: 600 }}>{o.id}</td>
-                  <td>{fmtDate(o.date, { day: 'numeric', month: 'short' })}</td>
-                  <td>{o.name}<div style={{ fontSize: 12, color: 'var(--muted2)' }}>{o.email}</div></td>
-                  <td>{money(o.total)}</td>
-                  <td><Status status={o.status} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {rows.length === 0 && <div className="muted" style={{ padding: 24 }}>No orders match.</div>}
-        </div>
-        {ord && (
-          <aside className="card stack" style={{ gap: 12, fontSize: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div className="h3">{ord.id}</div>
-              <button type="button" onClick={() => go('admin/orders')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--muted)', font: '500 14px Inter' }}>Close</button>
-            </div>
-            <span style={{ alignSelf: 'flex-start' }}><Status status={ord.status} /></span>
-            <div><b>{ord.name}</b><br />{ord.email}<br />{ord.phone}</div>
-            <div><b>Deliver to</b><br />{ord.addr}</div>
-            <div><b>Delivery</b> {ord.shipName} · <b>Payment</b> {ord.pay}</div>
-            {ord.sellerNote && <div style={{ background: '#FEF3C7', borderRadius: 8, padding: '8px 12px' }}><b>Note from customer</b><br />{ord.sellerNote}</div>}
-            {ord.note && <div style={{ background: 'var(--cream)', borderRadius: 8, padding: '8px 12px' }}><b>Gift message</b><br />{ord.note}</div>}
-            <div style={{ borderTop: '1px solid var(--line)', paddingTop: 8 }}>
-              {ord.items.map((l, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '4px 0' }}>
-                  <span>{l.qty} × {l.name}<br /><span style={{ fontSize: 12, color: 'var(--muted2)' }}>{lineText(l)}</span></span>
-                  <span>{money(l.unit * l.qty)}</span>
-                </div>
-              ))}
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Delivery</span><span>{ord.shipL}</span></div>
-            {ord.wrap > 0 && <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Gift wrap</span><span>{money(ord.wrap)}</span></div>}
-            {ord.disc > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--green)' }}><span>Discount {ord.code}</span><span>-{money(ord.disc)}</span></div>}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 18, fontWeight: 700 }}><span>Total</span><span>{money(ord.total)}</span></div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {next && <button type="button" className="btn sm" onClick={() => setStatus(ord.id, next)}>Mark {next}</button>}
-              {canCancel && <button type="button" className="btn sm ghost danger" onClick={() => setStatus(ord.id, 'Cancelled')}>Cancel Order</button>}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--muted2)' }}>
-              {(ord.log || []).map((g, i) => <div key={i}>{g.s} · {new Date(g.d).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>)}
-            </div>
-          </aside>
-        )}
-      </div>
-    </>
-  );
-}
+const H1 = ({ children }: { children: ReactNode }) => <PageHead title={String(children)} />;
 
 /* ------------------------------------------------------------------ Customers */
 export function Customers() {
   const users = useStored<User[]>('users', EMPTY);
   const orders = useStored<Order[]>('orders', EMPTY);
-  const live = orders.filter((o) => o.status !== 'Cancelled');
+  const [q, setQ] = useState('');
+  const [sel, setSel] = useState('');
+
+  // registered accounts plus guests who only ever checked out
+  const rows = useMemo(() => {
+    const live = orders.filter((o) => o.status !== 'Cancelled');
+    const byEmail = new Map<string, { name: string; email: string; phone: string; since: string; account: boolean; user?: User; all: Order[]; os: Order[] }>();
+    users.forEach((u) => byEmail.set(u.email.toLowerCase(), { name: u.name, email: u.email, phone: u.phone || u.address?.phone || '', since: u.joined, account: true, user: u, all: [], os: [] }));
+    orders.forEach((o) => {
+      const k = o.email.toLowerCase();
+      const c = byEmail.get(k) ?? { name: o.name, email: o.email, phone: o.phone, since: o.date.slice(0, 10), account: false, all: [], os: [] };
+      if (!c.phone) c.phone = o.phone;
+      c.all.push(o);
+      byEmail.set(k, c);
+    });
+    live.forEach((o) => byEmail.get(o.email.toLowerCase())?.os.push(o));
+    return [...byEmail.values()].map((c) => ({ ...c, spent: c.os.reduce((a, o) => a + o.total, 0) })).sort((a, b) => b.spent - a.spent);
+  }, [users, orders]);
+
+  const shown = rows.filter((c) => !q || (c.name + c.email + c.phone).toLowerCase().includes(q.toLowerCase()));
+  const cur = rows.find((c) => c.email.toLowerCase() === sel);
+  const subs = useStored<{ email: string; date: string }[]>('subscribers', EMPTY);
+  const exportSubs = () => downloadCsv('newsletter-subscribers', [['Email', 'Subscribed'], ...subs.map((s) => [s.email, s.date.slice(0, 10)])]);
+  const exportCsv = () => downloadCsv('customers', [['Name', 'Email', 'Phone', 'Account', 'Customer since', 'Orders', 'Total spent'], ...shown.map((c) => [c.name, c.email, c.phone, c.account ? 'Yes' : 'Guest', c.since, c.os.length, c.spent])]);
+
   return (
     <>
-      <H1>Customers</H1>
-      <div className="card flush" style={{ overflowX: 'auto' }}>
-        <table className="table">
-          <thead><tr><th>Name</th><th>Email</th><th>Joined</th><th>Orders</th><th>Spent</th></tr></thead>
-          <tbody>
-            {users.map((u) => {
-              const os = live.filter((o) => o.userId === u.id || o.email === u.email);
-              return <tr key={u.id}><td style={{ fontWeight: 600 }}>{u.name}</td><td>{u.email}</td><td>{u.joined}</td><td>{os.length}</td><td>{money(os.reduce((a, o) => a + o.total, 0))}</td></tr>;
-            })}
-          </tbody>
-        </table>
+      <PageHead title="Customers" sub={rows.length + ' customers, ' + rows.filter((c) => c.account).length + ' with accounts'} actions={<><button type="button" className="btn ghost sm" onClick={exportSubs}>Newsletter list ({subs.length})</button><button type="button" className="btn ghost sm" onClick={exportCsv}>Export CSV</button></>} />
+      <div className="filters"><input className="input" style={{ width: 300 }} placeholder="Search name, email, phone" aria-label="Search customers" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+      <div className={'orders-layout' + (cur ? ' open' : '')}>
+        <div className="card flush" style={{ overflowX: 'auto' }}>
+          <table className="table">
+            <thead><tr><th>Name</th><th>Contact</th><th>Since</th><th>Orders</th><th style={{ textAlign: 'right' }}>Spent</th></tr></thead>
+            <tbody>
+              {shown.map((c) => (
+                <tr key={c.email} className={'click' + (cur?.email === c.email ? ' sel' : '')} onClick={() => setSel(c.email.toLowerCase())}>
+                  <td style={{ fontWeight: 600 }}>{c.name}{!c.account && <span className="tagpill" style={{ marginLeft: 8 }}>Guest</span>}</td>
+                  <td>{c.email}<div className="muted" style={{ fontSize: 12 }}>{c.phone}</div></td>
+                  <td>{c.since}</td><td>{c.os.length}</td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(c.spent)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {shown.length === 0 && <div className="empty">No customers yet.</div>}
+        </div>
+        {cur && (
+          <aside className="panel detail" aria-label={'Customer ' + cur.name}>
+            <div className="row-between">
+              <div><div className="h3" style={{ fontSize: 20 }}>{cur.name}</div><div className="muted" style={{ fontSize: 12 }}>{cur.account ? 'Account since ' + cur.since : 'Guest customer, first order ' + cur.since}</div></div>
+              <button type="button" className="btn-xs" onClick={() => setSel('')}>Close</button>
+            </div>
+            <div className="block">
+              <h4>Contact</h4>
+              {cur.email}<br />{cur.phone}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                {cur.phone && <a className="btn-xs" href={waLink(cur.phone, 'Hi ' + cur.name.split(' ')[0] + ', this is Ember & Eve. ')} target="_blank" rel="noreferrer">WhatsApp</a>}
+                {cur.phone && <a className="btn-xs" href={'tel:' + cur.phone}>Call</a>}
+                <a className="btn-xs" href={'mailto:' + cur.email}>Email</a>
+              </div>
+            </div>
+            <div className="block">
+              <h4>Totals</h4>
+              <div className="row-between"><span>Orders</span><b>{cur.os.length}</b></div>
+              <div className="row-between"><span>Total spent</span><b>{money(cur.spent)}</b></div>
+              <div className="row-between"><span>Average order</span><b>{money(cur.os.length ? cur.spent / cur.os.length : 0)}</b></div>
+            </div>
+            <div className="block">
+              <h4>Saved addresses</h4>
+              {addressBook(cur.user).length === 0 ? <span className="muted">None saved.</span> : addressBook(cur.user).map((a) => (
+                <div key={a.id} style={{ padding: '4px 0' }}><b>{a.label}</b>{a.isDefault && <span className="tagpill" style={{ marginLeft: 6 }}>Default</span>}<br />{a.name} · {a.phone}<br /><span className="muted">{[a.a1, a.a2, a.city, a.district].filter(Boolean).join(', ')}</span></div>
+              ))}
+            </div>
+            <div className="block">
+              <h4>Orders</h4>
+              {cur.all.length === 0 ? <span className="muted">No orders yet.</span> : cur.all.slice().sort((a, b) => b.date.localeCompare(a.date)).map((o) => (
+                <a key={o.id} href={'#/admin/orders?sel=' + o.id} className="row-between" style={{ padding: '8px 0', borderBottom: '1px solid var(--a-line-soft)', textDecoration: 'none', color: 'inherit', gap: 8 }}>
+                  <span><b>{o.id}</b> · {fmtDate(o.date, { day: 'numeric', month: 'short' })}</span>
+                  <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><StatusBadge status={o.status} /><b>{money(o.total)}</b></span>
+                </a>
+              ))}
+            </div>
+          </aside>
+        )}
       </div>
     </>
   );
@@ -314,48 +207,6 @@ export function Messages() {
           </div>
         ))}
       </div>
-    </>
-  );
-}
-
-/* ------------------------------------------------------------------- Settings */
-export function SettingsView() {
-  const st = useStored<Settings>('settings', DEFAULT_SETTINGS);
-  const { bind, str, setF } = useForm({ sshop: st.shop, semail: st.email, sstd: st.standard, sexp: st.express, sfree: st.freeOver, swrap: st.giftWrap, sfc: st.freeColors, sxc: st.extraColorFee, sbox: st.giftBoxFee });
-  const [err, setErr] = useState('');
-  const [ok, setOk] = useState('');
-
-  const save = () => {
-    const n: Settings = { shop: str('sshop'), email: str('semail'), standard: Number(str('sstd')), express: Number(str('sexp')), freeOver: Number(str('sfree')), giftWrap: Number(str('swrap')), freeColors: Number(str('sfc')), extraColorFee: Number(str('sxc')), giftBoxFee: Number(str('sbox')) };
-    if ([n.standard, n.express, n.freeOver, n.giftWrap, n.freeColors, n.extraColorFee, n.giftBoxFee].some((x) => isNaN(x) || x < 0) || [str('sstd'), str('sexp'), str('sfree'), str('swrap'), str('sfc'), str('sxc'), str('sbox')].some((x) => x === '')) { setOk(''); return setErr('Delivery values must be numbers of 0 or more.'); }
-    if (str('spw') && str('spw').length < 8) { setOk(''); return setErr('Password must be at least 8 characters.'); }
-    set('settings', n);
-    if (str('spw')) set('adminpw', str('spw'));
-    setF({ sshop: n.shop, semail: n.email, sstd: n.standard, sexp: n.express, sfree: n.freeOver, swrap: n.giftWrap, sfc: n.freeColors, sxc: n.extraColorFee, sbox: n.giftBoxFee });
-    setErr(''); setOk('Settings saved.');
-  };
-
-  return (
-    <>
-      <H1>Settings</H1>
-      <form className="card stack" style={{ maxWidth: 560, gap: 16 }} onSubmit={(e) => e.preventDefault()} noValidate>
-        <div className="h3">Store and delivery</div>
-        <div className="fields two">
-          <Field label="Shop name" {...bind('sshop')} />
-          <Field label="Contact email" type="email" {...bind('semail')} />
-          <Field label="Standard delivery (Rs)" type="number" {...bind('sstd')} />
-          <Field label="Express delivery (Rs)" type="number" {...bind('sexp')} />
-          <Field label="Free delivery over (Rs)" type="number" {...bind('sfree')} />
-          <Field label="Gift wrap (Rs)" type="number" {...bind('swrap')} />
-          <Field label="Gift box fee (Rs)" type="number" {...bind('sbox')} />
-          <Field label="Free colours in a blend" type="number" {...bind('sfc')} />
-          <Field label="Fee per extra colour (Rs)" type="number" {...bind('sxc')} />
-          {!remote && <Field label="New admin password (optional)" type="password" {...bind('spw')} span={2} autoComplete="new-password" />}
-        </div>
-        <ErrorText>{err}</ErrorText>
-        {ok && <div className="ok">{ok}</div>}
-        <div><button type="submit" className="btn" onClick={save}>Save Settings</button></div>
-      </form>
     </>
   );
 }

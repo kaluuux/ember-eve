@@ -5,12 +5,14 @@ import { Chip } from '../components/ui';
 import { money } from '../store';
 import { go, type Route } from '../router';
 import { SHELVES, inStock, lowestPrice, type Shelf } from '../commerce';
+import { useHydrated } from '../sync';
 
 type Sort = 'feat' | 'lo' | 'hi' | 'az';
 
 /** Filters come from the URL (?cat=, ?shelf=, ?season=, ?q=) so home links and the menu can deep-link here. */
 export function Shop({ route }: { route: Route }) {
   const { active, seasonal: seasonalAll, seasons, categories, liveSeasons, shelf } = useApp();
+  const hydrated = useHydrated();
   const cat = route.q.cat || '';
   const shelfId = (route.q.shelf || '') as Shelf | '';
   const season = route.q.season || '';
@@ -104,7 +106,8 @@ export function Shop({ route }: { route: Route }) {
         </aside>
 
         <div style={{ minWidth: 0 }}>
-          {list.length === 0 && (
+          {list.length === 0 && !hydrated && <div className="pgrid">{[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="skel" />)}</div>}
+          {list.length === 0 && hydrated && (
             <div className="card" style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 18, fontWeight: 500 }}>No candles match.</div>
               <p className="muted">Try removing a filter.</p>

@@ -47,9 +47,9 @@ export function Chip({ on, onClick, size = 'sm', soft, children, style }: ChipPr
 }
 
 /** Labelled placeholder block standing in for photography. */
-export function Ph({ tint, label, ratio, stripe, style, children }: { tint: string; label?: string; ratio?: string; stripe?: boolean; style?: CSSProperties; children?: ReactNode }) {
+export function Ph({ tint, label, ratio, stripe, style, children, className }: { tint: string; label?: string; ratio?: string; stripe?: boolean; style?: CSSProperties; children?: ReactNode; className?: string }) {
   return (
-    <div className={'ph' + (stripe ? ' stripe' : '')} style={{ background: tint, aspectRatio: ratio, ...style }}>
+    <div className={'ph' + (stripe ? ' stripe' : '') + (className ? ' ' + className : '')} style={{ background: tint, aspectRatio: ratio, ...style }}>
       {label ? 'Image: ' + label : children}
     </div>
   );
