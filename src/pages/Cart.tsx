@@ -1,7 +1,7 @@
 import { useApp } from '../AppContext';
 import { DiscountBox } from '../components/DiscountBox';
 import { Stepper } from '../components/ui';
-import { freeMessage, lineText } from '../commerce';
+import { freeMessage, lineText, soft } from '../commerce';
 import { money } from '../store';
 
 export function Cart() {
@@ -23,7 +23,7 @@ export function Cart() {
               const href = l.pid ? '#/product/' + l.pid : '#/gifts';
               return (
                 <div key={l.key} className="card" style={{ padding: 16, display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <a href={href} aria-label={l.name} style={{ width: 80, height: 80, borderRadius: 8, background: l.tint, flex: 'none' }} />
+                  <a href={href} aria-label={l.name} style={{ width: 80, height: 80, borderRadius: 8, background: soft(l.tint), flex: 'none' }} />
                   <div style={{ flex: 1, minWidth: 160 }}>
                     <a href={href} style={{ fontSize: 16, fontWeight: 500, color: 'var(--ink)', textDecoration: 'none' }}>{l.name}</a>
                     <div className="muted">{lineText(l)}</div>

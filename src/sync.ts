@@ -55,6 +55,13 @@ const last = { products: new Map<number, string>(), orders: new Map<string, stri
 let catalogEmpty = false;
 export const isCatalogEmpty = () => catalogEmpty;
 
+/** True once the first load from the server has finished (always true offline). Lets pages show a skeleton instead of "not found". */
+let loaded = false;
+const LOADED = 'ee-loaded';
+const subLoaded = (cb: () => void) => { window.addEventListener(LOADED, cb); return () => window.removeEventListener(LOADED, cb); };
+export const useHydrated = () => useSyncExternalStore(subLoaded, () => !remote || loaded);
+function markLoaded() { if (!loaded) { loaded = true; window.dispatchEvent(new Event(LOADED)); } }
+
 export async function hydrate(): Promise<void> {
   if (!sb) return;
   try {
@@ -89,6 +96,8 @@ export async function hydrate(): Promise<void> {
       if (!pr.error) {
         setLocal('users', (pr.data ?? []).map((r) => ({ id: r.id, name: r.name ?? '', email: r.email ?? '', password: '', phone: r.phone ?? '', address: r.address ?? {}, addresses: r.addresses ?? [], joined: String(r.created_at).slice(0, 10) })));
       }
+      const sbs = await sb.from('subscribers').select('email,created_at').order('created_at');
+      if (!sbs.error) setLocal('subscribers', (sbs.data ?? []).map((r) => ({ email: r.email as string, date: r.created_at as string })));
       const ms = await sb.from('messages').select('id,data,is_read').order('id');
       if (!ms.error) {
         const list = (ms.data ?? []).map((r) => ({ ...(r.data as object), id: r.id as number, read: r.is_read as boolean }) as Message);
@@ -98,6 +107,8 @@ export async function hydrate(): Promise<void> {
     }
   } catch {
     /* offline: keep the cached copy */
+  } finally {
+    markLoaded();
   }
 }
 
@@ -274,6 +285,13 @@ export async function fetchOrder(id: string, email: string): Promise<Order | nul
 export async function submitReview(r: Omit<Review, 'id' | 'approved'>): Promise<void> {
   const { error } = await sb!.from('reviews').insert({ data: r, approved: false });
   if (error) throw error;
+}
+
+/** Add an email to the newsletter list. A repeat sign-up counts as success. */
+export async function subscribe(email: string): Promise<string> {
+  const { error } = await sb!.from('subscribers').insert({ email: email.trim().toLowerCase() });
+  if (!error || error.code === '23505') return '';
+  return /rate_limited/.test(error.message) ? 'Too many sign-ups from here. Please try again later.' : 'Could not sign you up right now. Please try again.';
 }
 
 export async function sendMessage(m: Omit<Message, 'id' | 'read'>): Promise<void> {

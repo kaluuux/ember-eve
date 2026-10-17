@@ -33,11 +33,13 @@ export function Customers() {
 
   const shown = rows.filter((c) => !q || (c.name + c.email + c.phone).toLowerCase().includes(q.toLowerCase()));
   const cur = rows.find((c) => c.email.toLowerCase() === sel);
+  const subs = useStored<{ email: string; date: string }[]>('subscribers', EMPTY);
+  const exportSubs = () => downloadCsv('newsletter-subscribers', [['Email', 'Subscribed'], ...subs.map((s) => [s.email, s.date.slice(0, 10)])]);
   const exportCsv = () => downloadCsv('customers', [['Name', 'Email', 'Phone', 'Account', 'Customer since', 'Orders', 'Total spent'], ...shown.map((c) => [c.name, c.email, c.phone, c.account ? 'Yes' : 'Guest', c.since, c.os.length, c.spent])]);
 
   return (
     <>
-      <PageHead title="Customers" sub={rows.length + ' customers, ' + rows.filter((c) => c.account).length + ' with accounts'} actions={<button type="button" className="btn ghost sm" onClick={exportCsv}>Export CSV</button>} />
+      <PageHead title="Customers" sub={rows.length + ' customers, ' + rows.filter((c) => c.account).length + ' with accounts'} actions={<><button type="button" className="btn ghost sm" onClick={exportSubs}>Newsletter list ({subs.length})</button><button type="button" className="btn ghost sm" onClick={exportCsv}>Export CSV</button></>} />
       <div className="filters"><input className="input" style={{ width: 300 }} placeholder="Search name, email, phone" aria-label="Search customers" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       <div className={'orders-layout' + (cur ? ' open' : '')}>
         <div className="card flush" style={{ overflowX: 'auto' }}>

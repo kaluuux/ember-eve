@@ -19,7 +19,7 @@ export function QuickViewModal() {
       <div className="scrim" onClick={close} />
       <div className="modal" role="dialog" aria-label={p.name}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 24 }}>
-          <div className="ph stripe" style={{ background: selectionTint(sel, colors), aspectRatio: '1', borderRadius: 16 }}>Image: {p.name}</div>
+          <div className="ph ph-art" style={{ backgroundColor: selectionTint(sel, colors), aspectRatio: '1', borderRadius: 18 }}>Image: {p.name}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div className="h3">{p.name}</div>

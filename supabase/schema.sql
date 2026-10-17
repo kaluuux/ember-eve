@@ -452,6 +452,31 @@ begin
 end $$;
 grant execute on function admin_patch_order(text, jsonb) to authenticated;
 
+-- ================================================================== newsletter
+create table if not exists subscribers (
+  email text primary key,
+  ip text,
+  created_at timestamptz not null default now()
+);
+alter table subscribers enable row level security;
+drop policy if exists "anyone can subscribe" on subscribers;
+drop policy if exists "subscribers admin" on subscribers;
+create policy "anyone can subscribe" on subscribers for insert with check (email ~ '^\S+@\S+\.\S+$' and length(email) < 200);
+create policy "subscribers admin" on subscribers for all using (is_admin()) with check (is_admin());
+
+create or replace function ee_limit_subscribers() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if is_admin() then return new; end if;
+  new.email := lower(btrim(new.email));
+  new.ip := nullif(ee_ip(), '');
+  if new.ip is not null and (select count(*) from subscribers where ip = new.ip and created_at > now() - interval '1 hour') >= 5 then
+    raise exception 'rate_limited';
+  end if;
+  return new;
+end $$;
+drop trigger if exists subscribers_limit on subscribers;
+create trigger subscribers_limit before insert on subscribers for each row execute function ee_limit_subscribers();
+
 -- ================================================================== shop images (LankaQR codes)
 -- Public so customers can see the QR; only admins can add or change files.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

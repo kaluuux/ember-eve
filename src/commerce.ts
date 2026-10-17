@@ -89,9 +89,12 @@ export function describe(p: Product, sel: Selection, palette: Color[]): string {
   return parts.join(' · ');
 }
 
+/** Pure white reads as an empty box on the page, so show it as warm cream. */
+export const soft = (hex: string) => (hex.toUpperCase() === '#FFFFFF' ? '#F3EADF' : hex);
+
 export function selectionTint(sel: Selection, palette: Color[]): string {
   const id = sel.color === CUSTOM ? sel.blend[0] : sel.color;
-  return palette.find((c) => c.id === id)?.hex ?? '#EADFD3';
+  return soft(palette.find((c) => c.id === id)?.hex ?? '#EADFD3');
 }
 
 /** Price of the default selection (the first choice in every group, e.g. smallest size, scented). Cards show it as "From". */

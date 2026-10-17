@@ -5,7 +5,7 @@ import { BankAccounts } from '../components/BankAccounts';
 import { CheckoutGate } from '../components/CheckoutGate';
 import { Summary } from './Cart';
 import { ErrorText, Field, useForm } from '../components/ui';
-import { computeTotals, lineText, type Totals } from '../commerce';
+import { computeTotals, lineText, type Totals, soft } from '../commerce';
 import { EMPTY, SL_DISTRICTS, addressBook, get, isEmail, money, set, setLocal, useStored } from '../store';
 import { remote } from '../remote';
 import { orderErrorText, placeOrder, quoteOrder, saveProfile } from '../sync';
@@ -277,7 +277,7 @@ export function Checkout() {
               <div className="h3">Order Summary</div>
               {cart.map((l) => (
                 <div key={l.key} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <div style={{ width: 48, height: 48, borderRadius: 8, background: l.tint, flex: 'none' }} />
+                  <div style={{ width: 48, height: 48, borderRadius: 8, background: soft(l.tint), flex: 'none' }} />
                   <div style={{ flex: 1, minWidth: 0, fontSize: 14 }}>
                     <div style={{ fontWeight: 500 }}>{l.name}</div>
                     <div className="muted">{lineText(l)} · Qty {l.qty}</div>

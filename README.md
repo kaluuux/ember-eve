@@ -34,6 +34,10 @@ Copy `.env.example` to `.env.local` and fill in `VITE_SUPABASE_URL` and `VITE_SU
 - **Track Order** (`#/track`) needs no account: a mobile number plus an order number or courier tracking number. It shows status only, never the email, street address or prices, and guessing is rate limited.
 - In Admin, **Customers** opens a panel with contact details, totals, saved addresses and every order, and each order has a private **internal note** customers never see.
 
+## Look and feel
+
+The storefront has a calm, warm design layer in `src/theme.css` (colours, type, buttons, motion) on top of the base styles in `src/index.css`. Headings use Cormorant Garamond; body text uses Inter. Motion is gentle and respects "reduce motion": scroll reveals, soft hover lifts, a candle-lighting hero, an interactive Colour Studio, floating embers, and a basket nudge when you add something. Newsletter sign-ups are stored in Supabase and listed in Admin > Customers (Newsletter list).
+
 ## How an order works
 
 1. The browser sends only the customer's choices (candle, options, colours, notes). The server (`place_order`) prices everything from the live catalogue, checks stock, applies the discount and delivery rate, and returns the final order. Checkout shows the server's totals before the customer pays.

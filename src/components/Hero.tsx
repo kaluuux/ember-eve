@@ -82,14 +82,14 @@ export function Hero() {
         </div>
         <div style={{ maxWidth: 1120, width: '100%', margin: '0 auto', padding: '0 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 32, alignItems: 'center', position: 'relative' }}>
           <div style={{ position: 'relative', zIndex: 2 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#CDBFB1' }}>Light up your little moments</div>
-            <h1 style={{ fontFamily: 'var(--serif)', fontSize: 56, lineHeight: 1.1, fontWeight: 700, margin: '16px 0' }}>Light something that feels like home.</h1>
-            <p style={{ fontSize: 18, lineHeight: '24px', color: '#D9CCBF', margin: '0 0 24px', maxWidth: 480 }}>
+            <div className="hero-eyebrow">Light up your little moments</div>
+            <h1 className="hero-title">Light something that feels like home.</h1>
+            <p style={{ fontSize: 18, lineHeight: '28px', color: '#D9CCBF', margin: '0 0 28px', maxWidth: 480 }}>
               Hand-poured soy wax candles in mold, glass and jar. Choose your colour, or blend your own, or build a gift box for someone you love.
             </p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <a href="#/shop" style={{ background: '#fff', color: '#7A5636', textDecoration: 'none', borderRadius: 8, padding: '12px 24px', fontWeight: 600 }}>Shop Candles</a>
-              <a href="#/finder" style={{ border: '1px solid rgba(255,255,255,0.3)', color: '#fff', textDecoration: 'none', borderRadius: 8, padding: '12px 24px', fontWeight: 600 }}>Find My Colour</a>
+              <a href="#/shop" className="hero-cta solid">Shop Candles</a>
+              <a href="#/finder" className="hero-cta line">Find My Colour</a>
             </div>
             <div style={{ display: 'flex', gap: 16, marginTop: 32, flexWrap: 'wrap', fontSize: 14, fontWeight: 500 }}>
               {['01 Unlit', '02 Jar ignites', '03 The collection', '04 Burn down'].map((s, i) => (

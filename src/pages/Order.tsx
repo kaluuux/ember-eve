@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useApp } from '../AppContext';
-import { lineText, orderView } from '../commerce';
+import { lineText, orderView, soft } from '../commerce';
 import { get, money, useStored, EMPTY } from '../store';
 import { remote } from '../remote';
 import { uploadReceipt } from '../sync';
@@ -72,7 +72,7 @@ export function Order({ route }: { route: Route }) {
           <div className="h3">Items</div>
           {ord.items.map((l, i) => (
             <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <div style={{ width: 48, height: 48, borderRadius: 8, background: l.tint, flex: 'none' }} />
+              <div style={{ width: 48, height: 48, borderRadius: 8, background: soft(l.tint), flex: 'none' }} />
               <div style={{ flex: 1, fontSize: 14 }}>
                 <div style={{ fontWeight: 500 }}>{l.name}</div>
                 <div className="muted">{lineText(l)} · Qty {l.qty}</div>

@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../AppContext';
 import { Chip, ErrorText, Stepper } from '../components/ui';
 import { ProductCard } from '../components/ProductCard';
 import { Configurator } from '../components/Configurator';
+import { Ico } from '../components/Flair';
+import { useHydrated } from '../sync';
 import { get, money, set } from '../store';
 import { remote } from '../remote';
 import { submitReview as submitReviewRemote } from '../sync';
@@ -22,6 +24,16 @@ export function Product({ route }: { route: Route }) {
   const [rvq, setRvq] = useState('');
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
+  const hydrated = useHydrated();
+  const ctaRef = useRef<HTMLDivElement>(null);
+  const [sticky, setSticky] = useState(false);
+  useEffect(() => {
+    const el = ctaRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([e]) => setSticky(!e.isIntersecting && e.boundingClientRect.top < 0), { threshold: 0 });
+    io.observe(el);
+    return () => io.disconnect();
+  });
 
   // reset selections whenever a different product is opened
   useEffect(() => {
@@ -30,6 +42,11 @@ export function Product({ route }: { route: Route }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.arg, pp?.id]);
 
+  if (!pp && !hydrated) {
+    return (
+      <section className="page"><div className="layout-half"><div className="skel" style={{ aspectRatio: '1', minHeight: 0 }} /><div className="stack" style={{ gap: 16 }}><div className="skel" style={{ height: 48, minHeight: 0 }} /><div className="skel" style={{ height: 28, minHeight: 0, width: '40%' }} /><div className="skel" style={{ height: 140, minHeight: 0 }} /></div></div></section>
+    );
+  }
   if (!pp) {
     return (
       <section className="page" style={{ textAlign: 'center' }}>
@@ -75,10 +92,10 @@ export function Product({ route }: { route: Route }) {
         <div className="crumb">Home / Shop / {cat ? cat + ' / ' : ''}{pp.name}</div>
         <div className="layout-half" style={{ marginTop: 16 }}>
           <div className="stack" style={{ gap: 12 }}>
-            <div className="ph" style={{ background: tint, aspectRatio: '1', borderRadius: 16, border: '1px solid var(--line)', padding: 16 }}>{pp.name}: {imgLabels[img]}</div>
+            <div className="ph ph-art" style={{ backgroundColor: tint, aspectRatio: '1', borderRadius: 22, border: '1px solid var(--line)', padding: 16 }}>{pp.name}: {imgLabels[img]}</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
               {imgLabels.map((l, i) => (
-                <button key={l} type="button" onClick={() => setImg(i)} aria-label={l} style={{ aspectRatio: '1', borderRadius: 8, cursor: 'pointer', border: `2px solid ${img === i ? 'var(--brown)' : 'transparent'}`, background: tint, fontSize: 10, color: 'var(--text2)', padding: 4, textAlign: 'left', display: 'flex', alignItems: 'flex-end' }}>{l}</button>
+                <button key={l} type="button" onClick={() => setImg(i)} aria-label={l} className="ph-art" style={{ aspectRatio: '1', borderRadius: 12, cursor: 'pointer', border: `2px solid ${img === i ? 'var(--brown)' : 'transparent'}`, backgroundColor: tint, fontSize: 10, color: 'var(--text2)', padding: 4, textAlign: 'left', display: 'flex', alignItems: 'flex-end' }}>{l}</button>
               ))}
             </div>
           </div>
@@ -95,12 +112,17 @@ export function Product({ route }: { route: Route }) {
             <div style={{ fontSize: 16, lineHeight: '24px', color: 'var(--text2)' }}>{pp.blurb}</div>
             <Configurator p={pp} sel={sel} onChange={setPick} />
             <div style={{ fontSize: 14, fontWeight: 500, color: !sold && (pp.stock === null || pp.stock > 5) ? 'var(--green)' : 'var(--amber)' }}>{stockText}</div>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div ref={ctaRef} style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
               <Stepper qty={sel.qty} onDec={() => setPick({ ...sel, qty: Math.max(1, sel.qty - 1) })} onInc={() => setPick({ ...sel, qty: Math.min(Math.max(1, available), sel.qty + 1) })} />
               <button type="button" className={'btn' + (sold || !blendValid(sel) ? ' disabled' : '')} onClick={() => addCandle(pp.id, sel)} style={{ flex: 1, minWidth: 160 }}>
                 {sold ? 'Sold Out' : 'Add to Basket'}
               </button>
               <button type="button" className="btn ghost" onClick={() => toggleWish(pp.id)} aria-pressed={saved}>{saved ? 'Saved' : 'Save'}</button>
+            </div>
+            <div className="assure">
+              <div><Ico n="leaf" />Natural, non-toxic soy wax</div>
+              <div><Ico n="hand" />Hand-poured to order</div>
+              <div><Ico n="truck" />Delivery across Sri Lanka</div>
             </div>
             <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid var(--line)', marginTop: 8 }} role="tablist">
               {TABS.map((t, i) => (
@@ -111,6 +133,13 @@ export function Product({ route }: { route: Route }) {
           </div>
         </div>
       </section>
+
+      {sticky && !sold && (
+        <div className="sticky-cta" role="region" aria-label="Add to basket">
+          <div><div className="nm">{pp.name}</div><div className="pr">{money(unit * sel.qty)}</div></div>
+          <button type="button" className={'btn' + (blendValid(sel) ? '' : ' disabled')} onClick={() => addCandle(pp.id, sel)}>Add to Basket</button>
+        </div>
+      )}
 
       <section className="band-white">
         <div className="page">
