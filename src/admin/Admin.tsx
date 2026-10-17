@@ -1,25 +1,32 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { EMPTY, get, set, useStored } from '../store';
+import { remote } from '../remote';
+import { adminSignIn, adminSignOut, onSyncError, useIsAdmin } from '../sync';
 import { ErrorText, Field, useForm } from '../components/ui';
 import { go, type Route } from '../router';
 import type { Message, Order, Review } from '../types';
-import { Customers, Dashboard, Discounts, Messages, OrdersView, ProductsView, ReviewsView, SettingsView } from './views';
+import { Customers, Dashboard, Discounts, Messages, OrdersView, ReviewsView, SettingsView } from './views';
+import { CatalogView, ProductsView } from './catalog';
 
 interface AdminSession { email: string }
 const NO_ADMIN: AdminSession | null = null;
 export const ADMIN_EMAIL = 'admin@emberandeve.example';
 
-const VIEWS = ['dash', 'orders', 'products', 'customers', 'discounts', 'reviews', 'messages', 'settings'] as const;
+const VIEWS = ['dash', 'orders', 'products', 'catalog', 'customers', 'discounts', 'reviews', 'messages', 'settings'] as const;
 type View = (typeof VIEWS)[number];
-const LABELS: Record<View, string> = { dash: 'Dashboard', orders: 'Orders', products: 'Products', customers: 'Customers', discounts: 'Discounts', reviews: 'Reviews', messages: 'Messages', settings: 'Settings' };
+const LABELS: Record<View, string> = { dash: 'Dashboard', orders: 'Orders', products: 'Products', catalog: 'Catalogue setup', customers: 'Customers', discounts: 'Discounts', reviews: 'Reviews', messages: 'Messages', settings: 'Settings' };
 
 export function Admin({ route }: { route: Route }) {
-  const admin = useStored<AdminSession | null>('admin', NO_ADMIN);
+  const localAdmin = useStored<AdminSession | null>('admin', NO_ADMIN);
+  const isAdmin = useIsAdmin();
+  const admin: AdminSession | null = remote ? (isAdmin ? { email: 'Signed in' } : null) : localAdmin;
   const orders = useStored<Order[]>('orders', EMPTY);
   const reviews = useStored<Review[]>('reviews', EMPTY);
   const msgs = useStored<Message[]>('messages', EMPTY);
   const [toast, setToast] = useState('');
   const flash = (m: string) => { setToast(m); window.setTimeout(() => setToast(''), 1800); };
+
+  useEffect(() => onSyncError((m) => { setToast(m); window.setTimeout(() => setToast(''), 5000); }), []);
 
   if (!admin) return <AdminLogin />;
 
@@ -46,7 +53,7 @@ export function Admin({ route }: { route: Route }) {
         </nav>
         <div style={{ flex: 1 }} />
         <a href="#/" style={{ color: '#D9CCBF', fontSize: 14, padding: '8px 12px', textDecoration: 'none' }}>View store</a>
-        <button type="button" className="admin-nav" style={{ border: '1px solid rgba(255,255,255,0.2)' }} onClick={() => set('admin', null)}>Sign Out</button>
+        <button type="button" className="admin-nav" style={{ border: '1px solid rgba(255,255,255,0.2)' }} onClick={() => (remote ? void adminSignOut() : set('admin', null))}>Sign Out</button>
         <div style={{ fontSize: 12, color: '#CDBFB1', padding: '8px 12px', wordBreak: 'break-all' }}>{admin.email}</div>
       </aside>
 
@@ -54,6 +61,7 @@ export function Admin({ route }: { route: Route }) {
         {view === 'dash' && <Dashboard />}
         {view === 'orders' && <OrdersView sel={route.q.sel || ''} flash={flash} />}
         {view === 'products' && <ProductsView flash={flash} />}
+        {view === 'catalog' && <CatalogView flash={flash} />}
         {view === 'customers' && <Customers />}
         {view === 'discounts' && <Discounts flash={flash} />}
         {view === 'reviews' && <ReviewsView />}
@@ -69,7 +77,14 @@ function AdminLogin() {
   const { bind, str, set: patch } = useForm();
   const [err, setErr] = useState('');
 
-  const submit = () => {
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (remote) {
+      setBusy(true);
+      const e = await adminSignIn(str('email').trim(), str('password'));
+      setBusy(false);
+      return setErr(e);
+    }
     const pw = get<string>('adminpw', 'admin123');
     if (str('email').trim().toLowerCase() !== ADMIN_EMAIL || str('password') !== pw) return setErr('Email or password is incorrect.');
     set<AdminSession>('admin', { email: ADMIN_EMAIL });
@@ -90,11 +105,11 @@ function AdminLogin() {
           <Field label="Password" type="password" {...bind('password')} autoComplete="current-password" />
         </div>
         <ErrorText>{err}</ErrorText>
-        <button type="submit" className="btn" onClick={submit}>Sign In</button>
-        <div style={{ background: 'var(--cream)', borderRadius: 8, padding: 12, fontSize: 12, color: 'var(--text2)' }}>
+        <button type="submit" className="btn" onClick={submit} disabled={busy}>{busy ? 'Signing in…' : 'Sign In'}</button>
+        {!remote && <div style={{ background: 'var(--cream)', borderRadius: 8, padding: 12, fontSize: 12, color: 'var(--text2)' }}>
           Demo admin: admin@emberandeve.example / admin123{' '}
           <button type="button" className="link-btn" style={{ fontSize: 12, fontWeight: 600 }} onClick={() => { patch({ email: ADMIN_EMAIL, password: 'admin123' }); setErr(''); }}>Fill</button>
-        </div>
+        </div>}
         <a href="#/" style={{ fontSize: 12, textAlign: 'center' }}>Back to the store</a>
       </form>
     </div>

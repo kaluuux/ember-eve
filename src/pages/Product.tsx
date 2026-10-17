@@ -1,21 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useApp } from '../AppContext';
-import { Chip, ErrorText, Ph, Stepper } from '../components/ui';
+import { Chip, ErrorText, Stepper } from '../components/ui';
 import { ProductCard } from '../components/ProductCard';
-import { WAX, get, money, scentOf, set } from '../store';
-import { firstInStock, ratingOf } from '../commerce';
+import { Configurator } from '../components/Configurator';
+import { get, money, set } from '../store';
+import { remote } from '../remote';
+import { submitReview as submitReviewRemote } from '../sync';
+import { blendValid, defaultSelection, fromListPrice, inStock, listPrice, normalize, ratingOf, selectionTint, unitPrice, type Selection } from '../commerce';
 import type { Route } from '../router';
 import type { Review } from '../types';
 
 const TABS = ['Description', 'Burn and Care', 'Delivery and Returns'];
 
 export function Product({ route }: { route: Route }) {
-  const { products, active, reviews, cart, settings, wish, toggleWish, addCandle, user } = useApp();
+  const { products, active, reviews, cart, settings, wish, toggleWish, addCandle, user, colors, categories } = useApp();
   const pp = products.find((x) => String(x.id) === route.arg);
-  const [scent, setScent] = useState('');
-  const [si, setSi] = useState(0);
-  const [wi, setWi] = useState(0);
-  const [qty, setQty] = useState(1);
+  const [pick, setPick] = useState<Selection | null>(null);
   const [tab, setTab] = useState(0);
   const [img, setImg] = useState(0);
   const [rvStars, setRvStars] = useState(5);
@@ -26,7 +26,7 @@ export function Product({ route }: { route: Route }) {
   // reset selections whenever a different product is opened
   useEffect(() => {
     if (!pp) return;
-    setScent(pp.scents[0]); setSi(firstInStock(pp)); setWi(0); setQty(1); setTab(0); setImg(0); setErr(''); setOk(''); setRvq('');
+    setPick(defaultSelection(pp, colors)); setTab(0); setImg(0); setErr(''); setOk(''); setRvq('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.arg, pp?.id]);
 
@@ -40,35 +40,42 @@ export function Product({ route }: { route: Route }) {
     );
   }
 
-  const cur = pp.scents.includes(scent) ? scent : pp.scents[0];
-  const z = pp.sizes[Math.min(si, pp.sizes.length - 1)];
-  const inBasket = cart.filter((x) => x.pid === pp.id && x.si === si).reduce((a, x) => a + x.qty, 0);
-  const available = z.stock - inBasket;
+  const sel = normalize(pp, pick ?? {}, colors);
+  const inBasket = cart.filter((x) => x.pid === pp.id).reduce((a, x) => a + x.qty, 0);
+  const available = pp.stock === null ? 10 : pp.stock - inBasket;
   const rt = ratingOf(reviews, pp.id);
   const mine = reviews.filter((r) => r.pid === pp.id);
   const saved = wish.includes(pp.id);
-  const tint = scentOf(cur).tint;
-  const imgLabels = ['Front, ' + cur, 'Lit, close-up', 'In a room', 'Packaging'];
+  const tint = selectionTint(sel, colors);
+  const unit = unitPrice(pp, sel, settings);
+  const sold = !inStock(pp);
+  const cat = categories.find((c) => c.id === pp.cat)?.name;
+  const imgLabels = ['Front', 'Lit, close-up', 'In a room', 'Packaging'];
   const tabText = [
     pp.desc,
-    'Trim the wick to 5mm before each burn. Let the wax melt fully across the surface on the first burn. Never leave a burning candle unattended.',
-    'Standard delivery ' + money(settings.standard) + ', free over ' + money(settings.freeOver) + '. Returns accepted within 30 days on unused candles.',
+    'Poured by hand from high quality, non-toxic soy wax with a cotton wick. Trim the wick to 5mm before each burn and let the wax melt across the surface on the first burn. Never leave a burning candle unattended.',
+    'Standard delivery ' + money(settings.standard) + ', free over ' + money(settings.freeOver) + '. Each candle is poured to order, so please allow a few days before dispatch.',
   ][tab];
-  const stockText = z.stock <= 0 ? 'Sold out' : available <= 0 ? 'All available stock is in your basket' : z.stock <= 5 ? 'Only ' + z.stock + ' left' : 'In stock · burn time ' + z.burn;
+  const stockText = sold ? 'Sold out' : pp.stock === null ? 'Made to order' : available <= 0 ? 'All available stock is in your basket' : pp.stock <= 5 ? 'Only ' + pp.stock + ' left' : 'In stock';
 
-  const submitReview = () => {
+  const submitReview = async () => {
     if (!rvq.trim() || !user) return setErr('Write a few words first.');
-    set<Review[]>('reviews', get<Review[]>('reviews', []).concat({ id: Date.now(), pid: pp.id, who: user.name, stars: rvStars, q: rvq.trim(), date: new Date().toISOString().slice(0, 10), approved: false }));
+    const rv = { pid: pp.id, who: user.name, stars: rvStars, q: rvq.trim(), date: new Date().toISOString().slice(0, 10) };
+    if (remote) {
+      try { await submitReviewRemote(rv); } catch { return setErr('Could not send your review. Please try again.'); }
+    } else {
+      set<Review[]>('reviews', get<Review[]>('reviews', []).concat({ id: Date.now(), ...rv, approved: false }));
+    }
     setRvq(''); setErr(''); setOk('Thank you. Your review will appear once approved.');
   };
 
   return (
     <>
       <section className="page">
-        <div className="crumb">Home / Shop / {pp.name}</div>
+        <div className="crumb">Home / Shop / {cat ? cat + ' / ' : ''}{pp.name}</div>
         <div className="layout-half" style={{ marginTop: 16 }}>
           <div className="stack" style={{ gap: 12 }}>
-            <Ph tint={tint} label={imgLabels[img]} ratio="1" style={{ borderRadius: 16, border: '1px solid var(--line)', padding: 16 }} />
+            <div className="ph" style={{ background: tint, aspectRatio: '1', borderRadius: 16, border: '1px solid var(--line)', padding: 16 }}>{pp.name}: {imgLabels[img]}</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
               {imgLabels.map((l, i) => (
                 <button key={l} type="button" onClick={() => setImg(i)} aria-label={l} style={{ aspectRatio: '1', borderRadius: 8, cursor: 'pointer', border: `2px solid ${img === i ? 'var(--brown)' : 'transparent'}`, background: tint, fontSize: 10, color: 'var(--text2)', padding: 4, textAlign: 'left', display: 'flex', alignItems: 'flex-end' }}>{l}</button>
@@ -81,31 +88,17 @@ export function Product({ route }: { route: Route }) {
               <h1 className="h1">{pp.name}</h1>
               <div className="muted" style={{ marginTop: 4 }}>{rt.n ? rt.avg.toFixed(1) + ' / 5 from ' + rt.n + (rt.n === 1 ? ' review' : ' reviews') : 'No reviews yet'}</div>
             </div>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{money(z.p + WAX[wi].add)}</div>
+            <div style={{ fontSize: 22, fontWeight: 700 }}>
+              {money(unit)}
+              {pp.salePct > 0 && <><s style={{ marginLeft: 10, fontSize: 16, fontWeight: 400, color: 'var(--muted2)' }}>{money(listPrice(pp, sel))}</s><span className="tagpill sale" style={{ marginLeft: 8 }}>-{pp.salePct}%</span></>}
+            </div>
             <div style={{ fontSize: 16, lineHeight: '24px', color: 'var(--text2)' }}>{pp.blurb}</div>
-            <div>
-              <div className="label-s">Scent: {cur}, {scentOf(cur).note.toLowerCase()}</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {pp.scents.map((n) => <Chip key={n} size="lg" on={n === cur} onClick={() => setScent(n)}>{n}</Chip>)}
-              </div>
-            </div>
-            <div>
-              <div className="label-s">Size</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {pp.sizes.map((s, i) => <Chip key={s.l} size="wide" on={i === si} onClick={() => { setSi(i); setQty(1); }}>{s.l} · {money(s.p)}{s.stock <= 0 ? ' · Sold out' : ''}</Chip>)}
-              </div>
-            </div>
-            <div>
-              <div className="label-s">Wax</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {WAX.map((w, i) => <Chip key={w.l} size="wide" on={i === wi} onClick={() => setWi(i)}>{w.l}{w.add ? ` (+${money(w.add)})` : ''}</Chip>)}
-              </div>
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 500, color: z.stock <= 5 ? 'var(--amber)' : 'var(--green)' }}>{stockText}</div>
+            <Configurator p={pp} sel={sel} onChange={setPick} />
+            <div style={{ fontSize: 14, fontWeight: 500, color: !sold && (pp.stock === null || pp.stock > 5) ? 'var(--green)' : 'var(--amber)' }}>{stockText}</div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Stepper qty={qty} onDec={() => setQty(Math.max(1, qty - 1))} onInc={() => setQty(Math.min(Math.max(1, available), qty + 1))} />
-              <button type="button" className={'btn' + (z.stock <= 0 ? ' disabled' : '')} onClick={() => addCandle(pp.id, cur, si, wi, qty)} style={{ flex: 1, minWidth: 160 }}>
-                {z.stock <= 0 ? 'Sold Out' : 'Add to Basket'}
+              <Stepper qty={sel.qty} onDec={() => setPick({ ...sel, qty: Math.max(1, sel.qty - 1) })} onInc={() => setPick({ ...sel, qty: Math.min(Math.max(1, available), sel.qty + 1) })} />
+              <button type="button" className={'btn' + (sold || !blendValid(sel) ? ' disabled' : '')} onClick={() => addCandle(pp.id, sel)} style={{ flex: 1, minWidth: 160 }}>
+                {sold ? 'Sold Out' : 'Add to Basket'}
               </button>
               <button type="button" className="btn ghost" onClick={() => toggleWish(pp.id)} aria-pressed={saved}>{saved ? 'Saved' : 'Save'}</button>
             </div>

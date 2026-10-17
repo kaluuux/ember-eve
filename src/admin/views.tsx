@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from 'react';
-import { ALL, EMPTY, STATUS_COLORS, DEFAULT_SETTINGS, fmtDate, get, money, set, useStored } from '../store';
+import { EMPTY, STATUS_COLORS, DEFAULT_SETTINGS, fmtDate, get, money, set, useStored } from '../store';
 import { Chip, ErrorText, Field, useForm } from '../components/ui';
 import { go } from '../router';
+import { remote } from '../remote';
 import type { Discount, Message, Order, OrderStatus, Product, Review, Settings, User } from '../types';
-import { orderView } from '../commerce';
+import { lineText, orderView } from '../commerce';
 
 type Flash = (m: string) => void;
 
@@ -28,10 +29,10 @@ export function Dashboard() {
   });
   const dv = days.map((d) => ({ d: d.d, v: live.filter((o) => new Date(o.date).toDateString() === d.key).reduce((a, o) => a + o.total, 0) }));
   const mx = Math.max(1, ...dv.map((x) => x.v));
-  const lows: { name: string; size: string; stock: string; color: string }[] = [];
-  products.forEach((p) => p.sizes.forEach((z) => {
-    if (z.stock <= 5) lows.push({ name: p.name, size: z.l, stock: z.stock === 0 ? 'Sold out' : z.stock + ' left', color: z.stock === 0 ? 'var(--red)' : 'var(--amber)' });
-  }));
+  const lows: { name: string; stock: string; color: string }[] = [];
+  products.forEach((p) => {
+    if (p.stock !== null && p.stock <= 5) lows.push({ name: p.name, stock: p.stock === 0 ? 'Sold out' : p.stock + ' left', color: p.stock === 0 ? 'var(--red)' : 'var(--amber)' });
+  });
   const units: Record<string, number> = {};
   live.forEach((o) => o.items.forEach((i) => { const k = i.name.split(',')[0]; units[k] = (units[k] || 0) + i.qty; }));
   const top = Object.keys(units).sort((a, b) => units[b] - units[a]).slice(0, 5);
@@ -71,7 +72,7 @@ export function Dashboard() {
         <div className="card">
           <div className="h3" style={{ marginBottom: 12 }}>Low stock</div>
           {lows.length === 0 && <div className="muted">Everything is well stocked.</div>}
-          {lows.map((l, i) => <div key={i} style={row}><span>{l.name} · {l.size}</span><span style={{ fontWeight: 600, color: l.color }}>{l.stock}</span></div>)}
+          {lows.map((l, i) => <div key={i} style={row}><span>{l.name}</span><span style={{ fontWeight: 600, color: l.color }}>{l.stock}</span></div>)}
         </div>
         <div className="card">
           <div className="h3" style={{ marginBottom: 12 }}>Top sellers</div>
@@ -110,7 +111,7 @@ export function OrdersView({ sel, flash }: { sel: string; flash: Flash }) {
       o.items.forEach((i) => {
         if (!i.pid) return;
         const p = products.find((x) => x.id === i.pid);
-        if (p?.sizes[i.si]) p.sizes[i.si].stock += i.qty;
+        if (p && p.stock !== null) p.stock += i.qty;
       });
     }
     o.status = st;
@@ -156,11 +157,12 @@ export function OrdersView({ sel, flash }: { sel: string; flash: Flash }) {
             <div><b>{ord.name}</b><br />{ord.email}<br />{ord.phone}</div>
             <div><b>Deliver to</b><br />{ord.addr}</div>
             <div><b>Delivery</b> {ord.shipName} · <b>Payment</b> {ord.pay}</div>
-            {ord.note && <div style={{ background: 'var(--cream)', borderRadius: 8, padding: '8px 12px' }}><b>Gift note</b><br />{ord.note}</div>}
+            {ord.sellerNote && <div style={{ background: '#FEF3C7', borderRadius: 8, padding: '8px 12px' }}><b>Note from customer</b><br />{ord.sellerNote}</div>}
+            {ord.note && <div style={{ background: 'var(--cream)', borderRadius: 8, padding: '8px 12px' }}><b>Gift message</b><br />{ord.note}</div>}
             <div style={{ borderTop: '1px solid var(--line)', paddingTop: 8 }}>
               {ord.items.map((l, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '4px 0' }}>
-                  <span>{l.qty} × {l.name}<br /><span style={{ fontSize: 12, color: 'var(--muted2)' }}>{l.sub}</span></span>
+                  <span>{l.qty} × {l.name}<br /><span style={{ fontSize: 12, color: 'var(--muted2)' }}>{lineText(l)}</span></span>
                   <span>{money(l.unit * l.qty)}</span>
                 </div>
               ))}
@@ -178,120 +180,6 @@ export function OrdersView({ sel, flash }: { sel: string; flash: Flash }) {
             </div>
           </aside>
         )}
-      </div>
-    </>
-  );
-}
-
-/* ------------------------------------------------------------------- Products */
-export function ProductsView({ flash }: { flash: Flash }) {
-  const products = useStored<Product[]>('products', EMPTY);
-  const [editing, setEditing] = useState<Product | null>(null);
-  const [confirm, setConfirm] = useState(0);
-
-  const newProduct = (): Product => ({ id: 0, name: '', shape: '', blurb: '', desc: '', sizes: [], scents: ALL.slice(), active: true, featured: false });
-
-  return (
-    <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-        <h1 className="h1">Products</h1>
-        <button type="button" className="btn" onClick={() => setEditing(newProduct())}>Add Product</button>
-      </div>
-      <div className="card flush" style={{ overflowX: 'auto' }}>
-        <table className="table">
-          <thead><tr><th>Product</th><th>Price</th><th>Stock</th><th>Status</th><th /></tr></thead>
-          <tbody>
-            {products.map((p) => (
-              <tr key={p.id}>
-                <td style={{ fontWeight: 600 }}>{p.name}<div style={{ fontSize: 12, color: 'var(--muted2)', fontWeight: 400 }}>{p.shape}</div></td>
-                <td>{p.sizes.map((z) => money(z.p)).join(' / ')}</td>
-                <td>{p.sizes.map((z) => z.l + ': ' + z.stock).join(' · ')} ({p.sizes.reduce((a, z) => a + z.stock, 0)})</td>
-                <td>
-                  <button type="button" className="tag" onClick={() => set('products', products.map((x) => (x.id === p.id ? { ...x, active: !x.active } : x)))} style={{ border: 'none', cursor: 'pointer', background: p.active ? '#DCFCE7' : 'var(--sand-l)', color: p.active ? '#166534' : 'var(--muted)' }}>
-                    {p.active ? 'Active' : 'Hidden'}
-                  </button>
-                </td>
-                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  <button type="button" className="btn-xs" onClick={() => setEditing(JSON.parse(JSON.stringify(p)))}>Edit</button>{' '}
-                  <button type="button" className="btn-xs danger" onClick={() => {
-                    if (confirm !== p.id) return setConfirm(p.id);
-                    set('products', products.filter((x) => x.id !== p.id)); setConfirm(0); flash('Product deleted');
-                  }}>{confirm === p.id ? 'Confirm' : 'Delete'}</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {editing && <ProductEditor product={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); flash('Product saved'); }} />}
-    </>
-  );
-}
-
-function ProductEditor({ product, onClose, onSaved }: { product: Product; onClose: () => void; onSaved: () => void }) {
-  const init: Record<string, string | number> = { pname: product.name, pshape: product.shape, pblurb: product.blurb, pdesc: product.desc };
-  [0, 1].forEach((i) => {
-    const z = product.sizes[i];
-    init['s' + i + 'l'] = z?.l ?? ''; init['s' + i + 'p'] = z?.p ?? ''; init['s' + i + 'b'] = z?.burn ?? ''; init['s' + i + 's'] = z?.stock ?? (product.id ? '' : 20);
-  });
-  const { bind, str } = useForm(init);
-  const [scents, setScents] = useState(product.scents);
-  const [active, setActive] = useState(product.active);
-  const [featured, setFeatured] = useState(product.featured);
-  const [err, setErr] = useState('');
-
-  const save = () => {
-    if (!str('pname').trim() || !str('pshape').trim()) return setErr('Name and shape are required.');
-    const sizes: Product['sizes'] = [];
-    for (const i of [0, 1]) {
-      const l = str('s' + i + 'l').trim(), p = Number(str('s' + i + 'p')), stk = Number(str('s' + i + 's'));
-      if (!l && i === 1) continue;
-      if (!l || !(p > 0) || !(stk >= 0) || str('s' + i + 's') === '') return setErr('Each size needs a label, a price above 0 and a stock number.');
-      sizes.push({ l, p, burn: str('s' + i + 'b'), stock: Math.floor(stk) });
-    }
-    if (!scents.length) return setErr('Choose at least one scent.');
-    const prod: Product = { id: product.id || Date.now(), name: str('pname').trim(), shape: str('pshape').trim(), blurb: str('pblurb'), desc: str('pdesc'), sizes, scents, active, featured };
-    const all = get<Product[]>('products', []);
-    set('products', product.id ? all.map((x) => (x.id === product.id ? prod : x)) : all.concat(prod));
-    onSaved();
-  };
-
-  return (
-    <>
-      <div className="scrim" onClick={onClose} />
-      <div className="modal stack" style={{ width: 'min(680px,calc(100vw - 32px))', gap: 16 }} role="dialog" aria-label="Edit product">
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <div className="h3">{product.id ? 'Edit ' + product.name : 'New product'}</div>
-          <button type="button" onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--muted)', font: '500 14px Inter' }}>Close</button>
-        </div>
-        <div className="fields two">
-          <Field label="Name" {...bind('pname')} />
-          <Field label="Shape" {...bind('pshape')} />
-          <Field label="Short description" {...bind('pblurb')} span={2} />
-          <Field label="Full description" {...bind('pdesc')} span={2} />
-        </div>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted2)' }}>Sizes: label, price (£), burn time, stock</div>
-        {[0, 1].map((i) => (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
-            <Field label={'Size ' + (i + 1)} {...bind('s' + i + 'l')} placeholder="200g" />
-            <Field label="Price" type="number" {...bind('s' + i + 'p')} />
-            <Field label="Burn" {...bind('s' + i + 'b')} placeholder="40 hours" />
-            <Field label="Stock" type="number" {...bind('s' + i + 's')} />
-          </div>
-        ))}
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted2)' }}>Scents offered</div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {ALL.map((n) => <Chip key={n} size="lg" on={scents.includes(n)} onClick={() => setScents((s) => (s.includes(n) ? s.filter((x) => x !== n) : s.concat(n)))}>{n}</Chip>)}
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Chip size="lg" on={active} onClick={() => setActive(!active)}>Visible in store</Chip>
-          <Chip size="lg" on={featured} onClick={() => setFeatured(!featured)}>Featured on home</Chip>
-        </div>
-        <ErrorText>{err}</ErrorText>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-          <button type="button" className="btn ghost" onClick={onClose}>Cancel</button>
-          <button type="button" className="btn" onClick={save}>Save Product</button>
-        </div>
       </div>
     </>
   );
@@ -361,8 +249,8 @@ export function Discounts({ flash }: { flash: Flash }) {
           <div className="h3">New code</div>
           <div className="fields one">
             <Field label="Code" {...bind('dcode')} placeholder="SUMMER15" />
-            <Field label="Value (% or £)" type="number" {...bind('dval')} />
-            <Field label="Minimum spend (£)" type="number" {...bind('dmin')} />
+            <Field label="Value (% or Rs)" type="number" {...bind('dval')} />
+            <Field label="Minimum spend (Rs)" type="number" {...bind('dmin')} />
           </div>
           <select className="input" value={dtype} onChange={(e) => setDtype(e.target.value as Discount['type'])} aria-label="Discount type">
             <option value="pct">Percentage off</option>
@@ -433,17 +321,17 @@ export function Messages() {
 /* ------------------------------------------------------------------- Settings */
 export function SettingsView() {
   const st = useStored<Settings>('settings', DEFAULT_SETTINGS);
-  const { bind, str, setF } = useForm({ sshop: st.shop, semail: st.email, sstd: st.standard, sexp: st.express, sfree: st.freeOver, swrap: st.giftWrap });
+  const { bind, str, setF } = useForm({ sshop: st.shop, semail: st.email, sstd: st.standard, sexp: st.express, sfree: st.freeOver, swrap: st.giftWrap, sfc: st.freeColors, sxc: st.extraColorFee, sbox: st.giftBoxFee });
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
 
   const save = () => {
-    const n: Settings = { shop: str('sshop'), email: str('semail'), standard: Number(str('sstd')), express: Number(str('sexp')), freeOver: Number(str('sfree')), giftWrap: Number(str('swrap')) };
-    if ([n.standard, n.express, n.freeOver, n.giftWrap].some((x) => isNaN(x) || x < 0) || [str('sstd'), str('sexp'), str('sfree'), str('swrap')].some((x) => x === '')) { setOk(''); return setErr('Delivery values must be numbers of 0 or more.'); }
+    const n: Settings = { shop: str('sshop'), email: str('semail'), standard: Number(str('sstd')), express: Number(str('sexp')), freeOver: Number(str('sfree')), giftWrap: Number(str('swrap')), freeColors: Number(str('sfc')), extraColorFee: Number(str('sxc')), giftBoxFee: Number(str('sbox')) };
+    if ([n.standard, n.express, n.freeOver, n.giftWrap, n.freeColors, n.extraColorFee, n.giftBoxFee].some((x) => isNaN(x) || x < 0) || [str('sstd'), str('sexp'), str('sfree'), str('swrap'), str('sfc'), str('sxc'), str('sbox')].some((x) => x === '')) { setOk(''); return setErr('Delivery values must be numbers of 0 or more.'); }
     if (str('spw') && str('spw').length < 8) { setOk(''); return setErr('Password must be at least 8 characters.'); }
     set('settings', n);
     if (str('spw')) set('adminpw', str('spw'));
-    setF({ sshop: n.shop, semail: n.email, sstd: n.standard, sexp: n.express, sfree: n.freeOver, swrap: n.giftWrap });
+    setF({ sshop: n.shop, semail: n.email, sstd: n.standard, sexp: n.express, sfree: n.freeOver, swrap: n.giftWrap, sfc: n.freeColors, sxc: n.extraColorFee, sbox: n.giftBoxFee });
     setErr(''); setOk('Settings saved.');
   };
 
@@ -455,11 +343,14 @@ export function SettingsView() {
         <div className="fields two">
           <Field label="Shop name" {...bind('sshop')} />
           <Field label="Contact email" type="email" {...bind('semail')} />
-          <Field label="Standard delivery (£)" type="number" {...bind('sstd')} />
-          <Field label="Express delivery (£)" type="number" {...bind('sexp')} />
-          <Field label="Free delivery over (£)" type="number" {...bind('sfree')} />
-          <Field label="Gift wrap (£)" type="number" {...bind('swrap')} />
-          <Field label="New admin password (optional)" type="password" {...bind('spw')} span={2} autoComplete="new-password" />
+          <Field label="Standard delivery (Rs)" type="number" {...bind('sstd')} />
+          <Field label="Express delivery (Rs)" type="number" {...bind('sexp')} />
+          <Field label="Free delivery over (Rs)" type="number" {...bind('sfree')} />
+          <Field label="Gift wrap (Rs)" type="number" {...bind('swrap')} />
+          <Field label="Gift box fee (Rs)" type="number" {...bind('sbox')} />
+          <Field label="Free colours in a blend" type="number" {...bind('sfc')} />
+          <Field label="Fee per extra colour (Rs)" type="number" {...bind('sxc')} />
+          {!remote && <Field label="New admin password (optional)" type="password" {...bind('spw')} span={2} autoComplete="new-password" />}
         </div>
         <ErrorText>{err}</ErrorText>
         {ok && <div className="ok">{ok}</div>}

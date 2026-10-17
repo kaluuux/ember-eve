@@ -2,48 +2,64 @@ import { useState } from 'react';
 import type { Product } from '../types';
 import { useApp } from '../AppContext';
 import { go } from '../router';
-import { Chip } from './ui';
-import { money, scentOf } from '../store';
-import { firstInStock, inStock, lowestPrice, ratingOf } from '../commerce';
+import { money } from '../store';
+import { defaultSelection, fromListPrice, inStock, lowestPrice, normalize, ratingOf } from '../commerce';
 
-export function ProductCard({ p, fam = 'All' }: { p: Product; fam?: string }) {
-  const { reviews, wish, toggleWish, setQv } = useApp();
-  const [picked, setPicked] = useState('');
-  const matching = p.scents.filter((n) => fam === 'All' || scentOf(n).f === fam);
-  const list = matching.length ? matching : p.scents;
-  const cur = list.includes(picked) ? picked : list[0];
+const DOTS = 7;
+
+export function ProductCard({ p }: { p: Product }) {
+  const { reviews, wish, toggleWish, setQv, colors, categories } = useApp();
+  const base = defaultSelection(p, colors);
+  const [color, setColor] = useState('');
+  const cur = p.colors && colors.some((c) => c.id === color) ? color : base.color;
+  const hex = colors.find((c) => c.id === cur)?.hex ?? '#EADFD3';
   const rt = ratingOf(reviews, p.id);
   const sold = !inStock(p);
   const saved = wish.includes(p.id);
   const href = '#/product/' + p.id;
+  const cat = categories.find((c) => c.id === p.cat)?.name;
+  const isNew = Date.now() - new Date(p.created).getTime() <= 30 * 86400000;
+  const from = lowestPrice(p), was = fromListPrice(p);
 
   return (
     <article className="pcard">
-      <a href={href} className="ph stripe thumb" style={{ background: scentOf(cur).tint }}>
-        <span>Image: {p.name}, {cur}</span>
-        {sold && <span className="badge">Sold out</span>}
+      <a href={href} className="ph stripe thumb" style={{ background: hex }}>
+        <span className="badge-row">
+          {p.salePct > 0 && <span className="tagpill sale">-{p.salePct}%</span>}
+          {isNew && <span className="tagpill new">New</span>}
+          {sold && <span className="badge">Sold out</span>}
+        </span>
+        <span>Image: {p.name}</span>
       </a>
-      <div style={{ padding: '0 4px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ padding: '0 4px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {cat && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--brown)' }}>{cat}</div>}
         <a href={href} className="name">{p.name}</a>
         <div style={{ fontSize: 14, lineHeight: '22px', color: 'var(--muted)' }}>{p.blurb}</div>
         <div style={{ fontSize: 12, color: 'var(--muted2)' }}>{rt.n ? rt.avg.toFixed(1) + ' / 5 (' + rt.n + ')' : 'No reviews yet'}</div>
       </div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '0 4px' }}>
-        {list.map((n) => <Chip key={n} on={n === cur} onClick={() => setPicked(n)}>{n}</Chip>)}
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '0 4px 4px' }}>
-        <div style={{ fontSize: 16, fontWeight: 600 }}>From {money(lowestPrice(p))}</div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={() => toggleWish(p.id)} aria-pressed={saved} className="btn-xs" style={{ padding: '8px 12px', borderColor: saved ? 'var(--brown)' : undefined, background: saved ? 'var(--cream)' : undefined }}>
+      {p.colors && (
+        <div className="swatch-dots" aria-label="Colours">
+          {colors.slice(0, DOTS).map((c) => (
+            <button key={c.id} type="button" className={'swatch' + (c.id === cur ? ' on' : '')} style={{ background: c.hex }} aria-label={c.name} title={c.name} onClick={() => setColor(c.id)} />
+          ))}
+          {colors.length > DOTS && <span style={{ fontSize: 12, color: 'var(--muted2)' }}>+{colors.length - DOTS}{p.custom ? ' & custom' : ''}</span>}
+        </div>
+      )}
+      <div className="foot">
+        <div style={{ fontSize: 16, fontWeight: 600 }}>
+          From {money(from)}{p.salePct > 0 && <s style={{ marginLeft: 8, fontSize: 13, fontWeight: 400, color: 'var(--muted2)' }}>{money(was)}</s>}
+        </div>
+        <div className="acts">
+          <button type="button" onClick={() => toggleWish(p.id)} aria-pressed={saved} className="btn-xs" style={{ padding: '10px 12px', borderColor: saved ? 'var(--brown)' : undefined, background: saved ? 'var(--cream)' : undefined }}>
             {saved ? 'Saved' : 'Save'}
           </button>
           <button
             type="button"
             className="btn"
-            style={{ fontWeight: 500, fontSize: 14, padding: '8px 12px' }}
-            onClick={() => (sold ? go('product/' + p.id) : setQv({ id: p.id, scent: cur, si: firstInStock(p), wi: 0, qty: 1 }))}
+            style={{ fontWeight: 500, fontSize: 14, padding: '10px 12px' }}
+            onClick={() => (sold ? go('product/' + p.id) : setQv({ id: p.id, sel: normalize(p, { color: cur }, colors) }))}
           >
-            {sold ? 'View' : 'Quick add'}
+            {sold ? 'View' : 'Customise'}
           </button>
         </div>
       </div>

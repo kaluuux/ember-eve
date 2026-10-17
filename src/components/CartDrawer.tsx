@@ -1,5 +1,5 @@
 import { useApp } from '../AppContext';
-import { freeMessage } from '../commerce';
+import { freeMessage, lineText } from '../commerce';
 import { money } from '../store';
 
 export function CartDrawer() {
@@ -21,7 +21,7 @@ export function CartDrawer() {
               <div style={{ width: 56, height: 56, borderRadius: 8, background: l.tint, flex: 'none' }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 16, fontWeight: 500 }}>{l.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted2)' }}>{l.sub} · {money(l.unit * l.qty)}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted2)' }}>{lineText(l)} · {money(l.unit * l.qty)}</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <button type="button" onClick={() => setQty(l.key, -1)} aria-label="Decrease quantity" style={qtyBtn}>-</button>

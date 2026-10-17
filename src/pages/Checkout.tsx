@@ -3,8 +3,10 @@ import { useApp } from '../AppContext';
 import { DiscountBox } from '../components/DiscountBox';
 import { Summary } from './Cart';
 import { Chip, ErrorText, Field, useForm } from '../components/ui';
-import { computeTotals } from '../commerce';
-import { get, isEmail, money, set } from '../store';
+import { computeTotals, lineText } from '../commerce';
+import { get, isEmail, money, set, setLocal } from '../store';
+import { remote } from '../remote';
+import { placeOrder } from '../sync';
 import { go } from '../router';
 import type { Order, Product, User } from '../types';
 
@@ -26,7 +28,10 @@ export function Checkout() {
 
   const field = (name: string, label: string, o: { type?: string; ph?: string; span?: 1 | 2 } = {}) => <Field key={name} label={label} {...bind(name)} type={o.type} placeholder={o.ph} span={o.span} />;
 
-  const next = () => {
+  const [busy, setBusy] = useState(false);
+
+  const next = async () => {
+    if (busy) return;
     if (step === 1) {
       if (!isEmail(str('email'))) return setErr('Enter a valid email address.');
       for (const [k, n] of [['first', 'first name'], ['last', 'last name'], ['a1', 'address'], ['city', 'town or city'], ['post', 'postcode']] as const) {
@@ -50,21 +55,34 @@ export function Checkout() {
     const order: Order = {
       id, date: iso, email: str('email'), name: str('first') + ' ' + str('last'), first: str('first'), phone: str('phone'),
       address: { a1: str('a1'), a2: str('a2'), city: str('city'), post: str('post') },
-      items: cart.map((l) => ({ name: l.name, sub: l.sub, qty: l.qty, unit: l.unit, tint: l.tint, pid: l.pid, si: l.si })),
+      items: cart.map((l) => ({ name: l.name, sub: l.sub, qty: l.qty, unit: l.unit, tint: l.tint, pid: l.pid, ...(l.note ? { note: l.note } : {}) })),
       sub: T.sub, disc: T.disc, code: disc, ship: T.ship, shipM, wrap: T.wrap, total: T.total, status: 'Processing',
-      pay: pay === 'card' ? 'Card ending ' + digits.slice(-4) : 'PayPal', note: str('gnote'), userId: user ? user.id : null, log: [{ s: 'Placed', d: iso }],
+      pay: pay === 'card' ? 'Card ending ' + digits.slice(-4) : 'PayPal', note: str('gnote'), sellerNote: str('snote').trim(), userId: user ? user.id : null, log: [{ s: 'Placed', d: iso }],
     };
-    const products = get<Product[]>('products', []);
-    cart.forEach((l) => {
-      if (!l.pid) return;
-      const p = products.find((x) => x.id === l.pid);
-      if (p?.sizes[l.si]) p.sizes[l.si].stock = Math.max(0, p.sizes[l.si].stock - l.qty);
-    });
-    set('products', products);
-    set('orders', orders.concat(order));
-    set('myorders', get<string[]>('myorders', []).concat(id));
+    let finalId = id;
+    if (remote) {
+      setBusy(true);
+      try {
+        finalId = await placeOrder(order);
+      } catch {
+        setBusy(false);
+        return setErr('We could not place your order. Please check your connection and try again.');
+      }
+      setBusy(false);
+      setLocal('orders', orders.concat({ ...order, id: finalId }));
+    } else {
+      const products = get<Product[]>('products', []);
+      cart.forEach((l) => {
+        if (!l.pid) return;
+        const p = products.find((x) => x.id === l.pid);
+        if (p && p.stock !== null) p.stock = Math.max(0, p.stock - l.qty);
+      });
+      set('products', products);
+      set('orders', orders.concat(order));
+    }
+    set('myorders', get<string[]>('myorders', []).concat(finalId));
     clearCart();
-    go('order/' + id + '?new=1');
+    go('order/' + finalId + '?new=1');
   };
 
   const back = () => { setErr(''); setStep(Math.max(1, step - 1)); };
@@ -106,6 +124,7 @@ export function Checkout() {
                     {field('city', 'Town or city')}
                     {field('post', 'Postcode')}
                   </div>
+                  <Field label="Note for the seller (optional)" {...bind('snote')} rows={3} placeholder="Colour matching, delivery instructions, anything we should know" />
                   <Field label="Gift message (optional)" {...bind('gnote')} rows={2} placeholder="Added to the packing slip" />
                   <ErrorText>{err}</ErrorText>
                   <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between', flexWrap: 'wrap' }}>
@@ -164,7 +183,7 @@ export function Checkout() {
                   <div style={{ width: 48, height: 48, borderRadius: 8, background: l.tint, flex: 'none' }} />
                   <div style={{ flex: 1, minWidth: 0, fontSize: 14 }}>
                     <div style={{ fontWeight: 500 }}>{l.name}</div>
-                    <div className="muted">{l.sub} · Qty {l.qty}</div>
+                    <div className="muted">{lineText(l)} · Qty {l.qty}</div>
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{money(l.unit * l.qty)}</div>
                 </div>

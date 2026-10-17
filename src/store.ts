@@ -1,5 +1,6 @@
 import { useMemo, useSyncExternalStore } from 'react';
-import type { Discount, Order, OrderStatus, Product, Scent, Settings, User, Wax, Review } from './types';
+import { remote } from './remote';
+import type { Category, Color, Discount, Group, Order, OrderStatus, Product, Review, Season, Settings, User } from './types';
 
 /**
  * localStorage-backed "demo store". Mirrors the data model of the design prototype
@@ -17,13 +18,30 @@ export function get<T>(k: string, d: T): T {
   }
 }
 
-export function set<T>(k: string, v: T): T {
+/** Write to this browser's cache only (used when loading data from the server). */
+export function setLocal<T>(k: string, v: T): T {
   try {
     localStorage.setItem(P + k, JSON.stringify(v));
   } catch {
     /* storage unavailable: keep running without persistence */
   }
   window.dispatchEvent(new Event(EVT));
+  return v;
+}
+
+export function clearLocal(k: string) {
+  try { localStorage.removeItem(P + k); } catch { /* ignore */ }
+  window.dispatchEvent(new Event(EVT));
+}
+
+type Push = (k: string, v: unknown) => void;
+let push: Push | null = null;
+/** The sync layer registers itself here so admin edits are written through to the server. */
+export function registerPush(fn: Push) { push = fn; }
+
+export function set<T>(k: string, v: T): T {
+  setLocal(k, v);
+  push?.(k, v);
   return v;
 }
 
@@ -47,24 +65,37 @@ export function useStored<T>(k: string, def: T): T {
   }, [raw, def]);
 }
 
-export const SC: Scent[] = [
-  { n: 'Vanilla', f: 'Sweet', tint: '#FEF3C7', note: 'Warm and creamy' },
-  { n: 'Strawberry', f: 'Fruity', tint: '#FCE7F3', note: 'Ripe and bright' },
-  { n: 'Jasmine', f: 'Floral', tint: '#EDE9FE', note: 'Soft white floral' },
-  { n: 'Lavender', f: 'Floral', tint: '#E0E7FF', note: 'Calm and clean' },
-  { n: 'Rosemary', f: 'Herbal', tint: '#DCFCE7', note: 'Green and fresh' },
+export const DEFAULT_COLORS: Color[] = [
+  { id: 'white', name: 'White', hex: '#FFFFFF' }, { id: 'ivory', name: 'Ivory', hex: '#F6EBD3' },
+  { id: 'yellow', name: 'Sunshine', hex: '#FBD85D' }, { id: 'orange', name: 'Orange', hex: '#F59E4B' },
+  { id: 'coral', name: 'Coral', hex: '#F27D72' }, { id: 'red', name: 'Red', hex: '#D64545' },
+  { id: 'pink', name: 'Blush Pink', hex: '#F7B9CE' }, { id: 'rose', name: 'Rose', hex: '#D9638F' },
+  { id: 'purple', name: 'Purple', hex: '#8E6BBF' }, { id: 'lavender', name: 'Lavender', hex: '#C7B6E8' },
+  { id: 'blue', name: 'Sky Blue', hex: '#7FB7E6' }, { id: 'teal', name: 'Ocean Teal', hex: '#3FA7A3' },
+  { id: 'green', name: 'Leaf Green', hex: '#7CB66B' }, { id: 'sage', name: 'Sage', hex: '#B5C4A1' },
+  { id: 'brown', name: 'Cocoa Brown', hex: '#8B5E3C' },
 ];
-export const ALL = SC.map((s) => s.n);
-export const WAX: Wax[] = [{ l: 'Soy', add: 0 }, { l: 'Coconut-soy blend', add: 2 }];
-export const FAMILIES = ['All', 'Sweet', 'Fruity', 'Floral', 'Herbal'];
-export const scentOf = (n: string | undefined): Scent => SC.find((x) => x.n === n) ?? SC[0];
+export const DEFAULT_CATEGORIES: Category[] = [
+  { id: 'mold', name: 'Mold Candles', blurb: 'Sculpted shapes, poured in moulds and finished by hand.' },
+  { id: 'glass', name: 'Glass Candles', blurb: 'Poured into glass, in two sizes, plain or themed.' },
+  { id: 'jar', name: 'Jar Candles', blurb: 'Hexagon and round jars with a steady, even burn.' },
+];
+export const DEFAULT_SEASONS: Season[] = [
+  { id: 'halloween', name: 'Halloween Collection', from: '10-01', to: '10-31', force: '', blurb: 'Spooky shapes for the end of October.' },
+  { id: 'christmas', name: 'Christmas Collection', from: '11-01', to: '12-31', force: '', blurb: 'Warm candles for the festive season.' },
+  { id: 'valentine', name: 'Valentine Collection', from: '01-25', to: '02-14', force: '', blurb: 'Hand-poured gifts for someone you love.' },
+  { id: 'traditional', name: 'Traditional Collection', from: '03-25', to: '04-20', force: '', blurb: 'Coconut shell candles for Avurudu and festive gatherings.' },
+];
+export const colorOf = (cs: Color[], id: string | undefined): Color => cs.find((c) => c.id === id) ?? cs[0] ?? { id: '', name: '', hex: '#EADFD3' };
 
 export function money(n: number): string {
-  n = Math.round(n * 100) / 100;
-  return '£' + (n % 1 === 0 ? n : n.toFixed(2));
+  return 'Rs ' + Math.round(n).toLocaleString('en-LK');
 }
 
-export const DEFAULT_SETTINGS: Settings = { shop: 'Ember & Eve', email: 'hello@emberandeve.example', standard: 3.5, express: 6, freeOver: 40, giftWrap: 3 };
+export const DEFAULT_SETTINGS: Settings = {
+  shop: 'Ember & Eve', email: 'hello@emberandeve.example', standard: 450, express: 900, freeOver: 8000, giftWrap: 300,
+  freeColors: 3, extraColorFee: 100, giftBoxFee: 1000,
+};
 
 export const STATUS_COLORS: Record<OrderStatus, [string, string]> = {
   Processing: ['#FEF3C7', '#8A4B00'],
@@ -76,56 +107,113 @@ export const STATUS_COLORS: Record<OrderStatus, [string, string]> = {
 // Stable empty defaults for useStored
 export const EMPTY: never[] = [];
 
-function seed() {
-  if (get('seeded_v1', false)) return;
-  const stock = (l: string, p: number, burn: string, s: number) => ({ l, p, burn, stock: s });
-  const mkP = (id: number, name: string, shape: string, blurb: string, desc: string, sizes: Product['sizes']): Product => ({
-    id, name, shape, blurb, desc, sizes, scents: ALL.slice(), active: true, featured: true,
-  });
-  set<Product[]>('products', [
-    mkP(1, 'Jar Candle', 'Jar', 'The classic. A glass jar with a cotton wick and a slow, even burn.', 'Hand-poured into a reusable glass jar. A full melt pool in the first burn, and a clean, steady flame to the last centimetre.', [stock('200g', 18, '40 hours', 40), stock('300g', 24, '60 hours', 25)]),
-    mkP(2, 'Butterfly Candle', 'Butterfly', 'A small sculpted butterfly, made to sit on a shelf or in a gift box.', 'Moulded and finished by hand. Best displayed lit once, then kept as a keepsake while it lasts.', [stock('80g', 9, '16 hours', 60), stock('120g', 13, '24 hours', 30)]),
-    mkP(3, 'Bubble Candle', 'Bubble', 'Stacked spheres that melt down in soft layers.', 'Three poured spheres joined by hand. Each layer burns on its own, so the shape changes as it melts.', [stock('100g', 12, '20 hours', 50), stock('160g', 17, '32 hours', 22)]),
-    mkP(4, 'Heart Candle', 'Heart', 'A hand-poured heart for birthdays, thank-yous and anniversaries.', 'A single poured heart with a centred wick. Arrives in a kraft box, ready to give.', [stock('90g', 10, '18 hours', 45), stock('140g', 14, '28 hours', 3)]),
-    mkP(5, 'Flower Candle', 'Flower', 'A full bloom of petals, poured in layers and finished by hand.', 'Each petal is shaped while the wax is soft. The wick sits in the centre of the bloom.', [stock('85g', 11, '18 hours', 35), stock('130g', 15, '27 hours', 0)]),
-  ]);
-  set<Discount[]>('discounts', [
-    { code: 'WELCOME10', type: 'pct', value: 10, min: 0, active: true, note: '10% off your order' },
-    { code: 'EVE5', type: 'fixed', value: 5, min: 20, active: true, note: '£5 off orders over £20' },
-    { code: 'FREESHIP', type: 'ship', value: 0, min: 0, active: true, note: 'Free standard delivery' },
-  ]);
-  set<Settings>('settings', DEFAULT_SETTINGS);
-  const users: User[] = [
-    { id: 1, name: 'Demo Customer', email: 'demo@emberandeve.example', password: 'candle123', address: { phone: '07700 900123', first: 'Demo', last: 'Customer', a1: '12 Mill Lane', a2: '', city: 'Leeds', post: 'LS1 4AB' }, joined: '2026-08-02' },
-    { id: 2, name: 'Amira Khan', email: 'amira@example.com', password: 'candle123', address: {}, joined: '2026-08-19' },
-    { id: 3, name: 'Tom Reed', email: 'tom@example.com', password: 'candle123', address: {}, joined: '2026-09-01' },
-    { id: 4, name: 'Priya Shah', email: 'priya@example.com', password: 'candle123', address: {}, joined: '2026-09-14' },
-  ];
-  set('users', users);
+const FRAG: Group = {
+  id: 'frag', label: 'Fragrance',
+  // Scented is the default and the listed price; unscented takes Rs 50 off.
+  options: [...['Vanilla', 'Lavender', 'Jasmine', 'Rosemary', 'Strawberry'].map((n) => ({ id: n.toLowerCase(), label: n, add: 0 })), { id: 'none', label: 'Unscented', add: -50 }],
+};
+const GLASS_SIZE: Group = { id: 'size', label: 'Size', options: [{ id: 's', label: 'Small (150g)', add: 0 }, { id: 'l', label: 'Large (300g)', add: 600 }] };
+
+/** The starter catalogue: used by the offline demo and by the admin "Publish starter catalogue" button. */
+export function starterCatalog() {
   const day = 86400000, now = Date.now();
+  const ago = (d: number) => new Date(now - d * day).toISOString();
+  const mk = (id: number, name: string, cat: string, base: number, blurb: string, o: Partial<Product> = {}): Product => ({
+    id, name, cat, blurb, desc: blurb + ' Hand-poured in small batches from high quality, non-toxic soy wax, with a cotton wick and careful finishing.',
+    base, groups: [], colors: true, custom: true, sticker: cat === 'jar' || cat === 'glass', stock: null, salePct: 0, pins: [], season: '', active: true, featured: false,
+    created: ago(90), ...o,
+  });
+  const products: Product[] = [];
+  let id = 1;
+  /** Base prices already include the scent; unscented is Rs 50 less. */
+  const SC = 50;
+  const molds = ['Rose', 'Lotus', 'Heart', 'Butterfly', 'Bubble', 'Flower', 'Pillar', 'Seashell', 'Star', 'Cloud', 'Teddy Bear', 'Tulip'];
+  molds.forEach((n, i) => products.push(mk(id++, n + ' Candle', 'mold', 450 + (i % 4) * 100, 'A hand-poured ' + n.toLowerCase() + ', made in the colour you choose.', {
+    groups: [FRAG], stock: n === 'Rose' ? 3 : n === 'Cloud' ? 0 : null, salePct: n === 'Tulip' ? 15 : 0, created: ago(i === 3 ? 6 : i === 9 ? 12 : 90), featured: i < 4,
+  })));
+  products.push(mk(id++, 'Classic Glass Candle', 'glass', 1200, 'Simple and clean in a glass vessel. Scented or unscented.', { groups: [GLASS_SIZE, FRAG], featured: true }));
+  products.push(mk(id++, 'Sea Theme Glass Candle', 'glass', 1500, 'Shells and ocean tones layered inside the glass.', { groups: [GLASS_SIZE, FRAG], created: ago(9) }));
+  products.push(mk(id++, 'Garden Theme Glass Candle', 'glass', 1500, 'Dried petals and soft greens, poured in layers.', { groups: [GLASS_SIZE, FRAG], salePct: 10 }));
+  products.push(mk(id++, 'Hexagon Jar Candle', 'jar', 1400, 'A clear hexagon jar with a slow, even burn.', { groups: [FRAG], featured: true }));
+  products.push(mk(id++, 'Round Jar Candle', 'jar', 1600, 'A round jar in clear glass, or a brown jar in white wax.', {
+    groups: [
+      { id: 'jar', label: 'Jar', options: [{ id: 'clear', label: 'Clear jar', add: 0 }, { id: 'brown', label: 'Brown jar (white only)', add: 0, colors: ['white'] }] },
+      FRAG,
+    ],
+    created: ago(3),
+  }));
+  const seasonal: [string, string, string, number, string][] = [
+    ['halloween', 'Pumpkin Mold Candle', 'mold', 650, 'A little pumpkin for the Halloween table.'],
+    ['halloween', 'Haunted Jar Candle', 'jar', 1500, 'Dark tones and a spiced scent in a hexagon jar.'],
+    ['christmas', 'Christmas Tree Mold Candle', 'mold', 700, 'A tiered tree, poured and finished by hand.'],
+    ['christmas', 'Winter Pine Glass Candle', 'glass', 1600, 'Evergreen layers in glass, made for gifting.'],
+    ['valentine', 'Rose Heart Mold Candle', 'mold', 750, 'A heart topped with a rose, for someone you love.'],
+    ['valentine', 'Love Letter Glass Candle', 'glass', 1600, 'Soft pinks in glass with a gift-ready finish.'],
+    ['traditional', 'Coconut Shell Candle', 'jar', 900, 'Poured into a real coconut shell. A traditional look for any home.'],
+    ['traditional', 'Avurudu Lamp Candle', 'mold', 600, 'A lamp-shaped candle for festive gatherings.'],
+  ];
+  seasonal.forEach(([season, n, cat, base, blurb]) => products.push(mk(id++, n, cat, base, blurb, {
+    season, groups: cat === 'glass' ? [GLASS_SIZE, FRAG] : [FRAG], created: ago(season === 'halloween' ? 5 : 40),
+  })));
+  products.forEach((p) => { if (p.groups.some((g) => g.id === 'frag')) p.base += SC; });
+  return {
+    products,
+    colors: DEFAULT_COLORS,
+    categories: DEFAULT_CATEGORIES,
+    seasons: DEFAULT_SEASONS,
+    settings: DEFAULT_SETTINGS,
+    discounts: [
+      { code: 'WELCOME10', type: 'pct', value: 10, min: 0, active: true, note: '10% off your order' },
+      { code: 'EVE500', type: 'fixed', value: 500, min: 3000, active: true, note: 'Rs 500 off orders over Rs 3,000' },
+      { code: 'FREESHIP', type: 'ship', value: 0, min: 0, active: true, note: 'Free standard delivery' },
+    ] as Discount[],
+  };
+}
+
+function seed() {
+  if (remote || get('seeded_v5', false)) return;
+  const day = 86400000, now = Date.now();
+  const ago = (d: number) => new Date(now - d * day).toISOString();
+  const { products } = starterCatalog();
+  set<Product[]>('products', products);
+  set<Color[]>('colors', DEFAULT_COLORS);
+  set<Category[]>('categories', DEFAULT_CATEGORIES);
+  set<Season[]>('seasons', DEFAULT_SEASONS);
+  set<Discount[]>('discounts', starterCatalog().discounts);
+  set<Settings>('settings', DEFAULT_SETTINGS);
+  set('cart', []); set('wish', []);
+  if (!get<User[]>('users', []).length) {
+    const addr = { phone: '0771234567', first: 'Demo', last: 'Customer', a1: '12 Galle Road', a2: '', city: 'Colombo', post: '00300' };
+    set<User[]>('users', [
+      { id: 1, name: 'Demo Customer', email: 'demo@emberandeve.example', password: 'candle123', address: addr, joined: '2026-08-02' },
+      { id: 2, name: 'Amaya Perera', email: 'amaya@example.com', password: 'candle123', address: {}, joined: '2026-08-19' },
+      { id: 3, name: 'Nuwan Silva', email: 'nuwan@example.com', password: 'candle123', address: {}, joined: '2026-09-01' },
+      { id: 4, name: 'Dilini Fernando', email: 'dilini@example.com', password: 'candle123', address: {}, joined: '2026-09-14' },
+    ]);
+  }
+  const users = get<User[]>('users', []);
+  const u = (i: number) => users[Math.min(i, users.length - 1)];
   type It = Order['items'][number];
-  const it = (name: string, sub: string, qty: number, unit: number, tint: string, pid: number, si: number): It => ({ name, sub, qty, unit, tint, pid, si });
-  const mk = (n: number, ago: number, u: User, status: OrderStatus, items: It[]): Order => {
-    const sub = items.reduce((a, i) => a + i.unit * i.qty, 0), ship = sub >= 40 ? 0 : 3.5, d = new Date(now - ago * day).toISOString();
-    return { id: 'EE-' + n, date: d, email: u.email, name: u.name, phone: '07700 900123', address: { a1: '12 Mill Lane', a2: '', city: 'Leeds', post: 'LS1 4AB' }, items, sub, disc: 0, code: '', ship, shipM: 'standard', wrap: 0, total: sub + ship, status, pay: 'Card ending 4242', note: '', userId: u.id, log: [{ s: 'Placed', d }] };
+  const it = (pid: number, sub: string, qty: number, unit: number, tint: string): It => ({ name: products.find((p) => p.id === pid)?.name ?? '', sub, qty, unit, tint, pid });
+  const mkO = (n: number, d: number, us: User, status: OrderStatus, items: It[]): Order => {
+    const sub = items.reduce((a, i) => a + i.unit * i.qty, 0), ship = sub >= DEFAULT_SETTINGS.freeOver ? 0 : DEFAULT_SETTINGS.standard, dt = ago(d);
+    return { id: 'EE-' + n, date: dt, email: us.email, name: us.name, phone: '0771234567', address: { a1: '12 Galle Road', a2: '', city: 'Colombo', post: '00300' }, items, sub, disc: 0, code: '', ship, shipM: 'standard', wrap: 0, total: sub + ship, status, pay: 'Bank transfer', note: '', userId: us.id, log: [{ s: 'Placed', d: dt }] };
   };
   set<Order[]>('orders', [
-    mk(1001, 12, users[1], 'Delivered', [it('Jar Candle, Lavender', '200g · Soy', 2, 18, '#E0E7FF', 1, 0)]),
-    mk(1002, 9, users[2], 'Delivered', [it('Heart Candle, Strawberry', '90g · Soy', 1, 10, '#FCE7F3', 4, 0), it('Butterfly Candle, Jasmine', '80g · Soy', 2, 9, '#EDE9FE', 2, 0)]),
-    mk(1003, 6, users[3], 'Dispatched', [it('Bubble Candle, Vanilla', '160g · Coconut-soy blend', 1, 19, '#FEF3C7', 3, 1)]),
-    mk(1004, 4, users[0], 'Dispatched', [it('Jar Candle, Rosemary', '300g · Soy', 1, 24, '#DCFCE7', 1, 1), it('Flower Candle, Jasmine', '85g · Soy', 1, 11, '#EDE9FE', 5, 0)]),
-    mk(1005, 2, users[1], 'Processing', [it('Butterfly Candle, Vanilla', '120g · Soy', 3, 13, '#FEF3C7', 2, 1)]),
-    mk(1006, 0, users[2], 'Processing', [it('Heart Candle, Lavender', '140g · Soy', 1, 14, '#E0E7FF', 4, 1)]),
+    mkO(1001, 40, u(1), 'Delivered', [it(1, 'Fragrance: Unscented · Colour: Rose', 2, 450, '#D9638F'), it(13, 'Size: Small (150g) · Fragrance: Vanilla · Colour: White', 1, 1250, '#FFFFFF')]),
+    mkO(1002, 22, u(2), 'Delivered', [it(4, 'Fragrance: Unscented · Colour: Lavender', 3, 450, '#C7B6E8')]),
+    mkO(1003, 9, u(3), 'Delivered', [it(16, 'Fragrance: Lavender · Colour: Sage', 2, 1450, '#B5C4A1'), it(1, 'Fragrance: Unscented · Colour: Blush Pink', 1, 450, '#F7B9CE')]),
+    mkO(1004, 5, u(0), 'Dispatched', [it(4, 'Fragrance: Unscented · Colour: Sky Blue', 2, 450, '#7FB7E6'), it(14, 'Size: Large (300g) · Fragrance: Unscented · Colour: Ocean Teal', 1, 2100, '#3FA7A3')]),
+    mkO(1005, 2, u(1), 'Processing', [it(17, 'Jar: Brown jar (white only) · Fragrance: Jasmine · Colour: White', 1, 1650, '#FFFFFF'), it(3, 'Fragrance: Unscented · Colour: Red', 1, 550, '#D64545')]),
+    mkO(1006, 0, u(2), 'Processing', [it(4, 'Fragrance: Unscented · Colour: Coral', 1, 450, '#F27D72')]),
   ]);
   set<Review[]>('reviews', [
-    { id: 1, pid: 1, who: 'Priya, Bristol', stars: 5, q: 'Lavender jar burns evenly and the scent fills the bedroom without being heavy.', date: '2026-09-10', approved: true },
-    { id: 2, pid: 1, who: 'Tom, Leeds', stars: 5, q: 'Even melt pool, no tunnelling. The 300g has lasted me two months.', date: '2026-09-02', approved: true },
-    { id: 3, pid: 2, who: 'Amira, London', stars: 5, q: 'Too pretty to light, and then it smelled amazing.', date: '2026-09-05', approved: true },
-    { id: 4, pid: 3, who: 'Jo, Bath', stars: 4, q: 'Fun to watch it melt in layers. Vanilla is sweet but not sickly.', date: '2026-09-12', approved: true },
-    { id: 5, pid: 4, who: 'Sam, York', stars: 5, q: 'Bought as an anniversary gift. It arrived well packed and she loved it.', date: '2026-09-20', approved: true },
-    { id: 6, pid: 5, who: 'Lena, Cardiff', stars: 5, q: 'The petals are beautiful in person. Jasmine is soft and fresh.', date: '2026-09-22', approved: true },
+    { id: 1, pid: 1, who: 'Amaya, Colombo', stars: 5, q: 'The rose candle is beautiful in person and the colour matched exactly what I picked.', date: '2026-09-10', approved: true },
+    { id: 2, pid: 16, who: 'Nuwan, Kandy', stars: 5, q: 'Even melt, no soot, and the lavender is gentle. Great jar.', date: '2026-09-18', approved: true },
+    { id: 3, pid: 4, who: 'Dilini, Galle', stars: 5, q: 'Ordered a custom blend for my sister. She loved it.', date: '2026-09-22', approved: true },
+    { id: 4, pid: 13, who: 'Sachini, Negombo', stars: 4, q: 'Lovely glass candle. Arrived well packed.', date: '2026-09-25', approved: true },
   ]);
-  set('seeded_v1', true);
+  set('seeded_v3', true);
 }
 seed();
 

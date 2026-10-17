@@ -1,5 +1,5 @@
 import { useApp } from '../AppContext';
-import { orderView } from '../commerce';
+import { lineText, orderView } from '../commerce';
 import { get, money, useStored, EMPTY } from '../store';
 import type { Order as OrderT } from '../types';
 import type { Route } from '../router';
@@ -57,7 +57,7 @@ export function Order({ route }: { route: Route }) {
               <div style={{ width: 48, height: 48, borderRadius: 8, background: l.tint, flex: 'none' }} />
               <div style={{ flex: 1, fontSize: 14 }}>
                 <div style={{ fontWeight: 500 }}>{l.name}</div>
-                <div className="muted">{l.sub} · Qty {l.qty}</div>
+                <div className="muted">{lineText(l)} · Qty {l.qty}</div>
               </div>
               <div style={{ fontSize: 14, fontWeight: 600 }}>{money(l.unit * l.qty)}</div>
             </div>
@@ -68,6 +68,7 @@ export function Order({ route }: { route: Route }) {
           <div><b>Placed</b><br />{ord.dateL}</div>
           <div><b>Deliver to</b><br />{ord.name}<br />{ord.addr}</div>
           <div><b>Delivery</b><br />{ord.shipName}</div>
+          {ord.sellerNote && <div><b>Your note to us</b><br />{ord.sellerNote}</div>}
           <div><b>Payment</b><br />{ord.pay}</div>
           <div style={{ borderTop: '1px solid var(--line)', paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}><span>Subtotal</span><span>{money(ord.sub)}</span></div>
           {ord.disc > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--green)' }}><span>Discount</span><span>-{money(ord.disc)}</span></div>}
