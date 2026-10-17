@@ -85,7 +85,7 @@ export function Checkout() {
       }
       setErr(''); return setStep(3);
     }
-    if (!pay) return setErr('No payment method is available right now. Please contact us.');
+    if (!pay) return setErr('We cannot take payment online just yet. Please contact us' + (st.whatsapp ? ' on WhatsApp' : '') + ' to place your order.');
 
     let order: Order;
     setBusy(true);
@@ -200,6 +200,12 @@ export function Checkout() {
                   <div style={{ fontSize: 14, color: 'var(--text2)' }}>
                     {shipM === 'pickup' ? <>Collect from: {st.pickupAddress}</> : <>Deliver to: {addr}</>} <button type="button" className="link-btn" onClick={() => setStep(2)}>Edit</button>
                   </div>
+                  {methods.length === 0 && (
+                    <div className="notice-warn">
+                      Online payment is not set up yet, so this order cannot be placed.{' '}
+                      {st.whatsapp ? <a href={'https://wa.me/' + st.whatsapp} target="_blank" rel="noreferrer">Message us on WhatsApp</a> : <>Please contact us.</>}
+                    </div>
+                  )}
                   {methods.map((m) => <OptionRow key={m} on={pay === m} onClick={() => setPayMethod(m)} title={PAY_INFO[m].title} sub={PAY_INFO[m].sub} price="" />)}
                   {pay === 'bank' && (
                     <div className="bank-box">
@@ -213,7 +219,7 @@ export function Checkout() {
                   <ErrorText>{err}</ErrorText>
                   <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between', flexWrap: 'wrap' }}>
                     <button type="button" className="btn ghost" onClick={back}>Back</button>
-                    <button type="button" className="btn" onClick={next} disabled={busy || (remote && !quote && !err)}>{busy ? 'Placing order…' : 'Place Order · ' + money(T.total)}</button>
+                    <button type="button" className="btn" onClick={next} disabled={busy || !pay || (remote && !quote && !err)}>{busy ? 'Placing order…' : 'Place Order · ' + money(T.total)}</button>
                   </div>
                 </div>
               )}
