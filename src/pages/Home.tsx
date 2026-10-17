@@ -9,7 +9,7 @@ import type { Product } from '../types';
 export const INGREDIENTS = [
   { v: '100%', t: 'High quality soy wax', d: 'Non-toxic, clean burning and gentle on your home. Every candle is poured by hand with care and attention to detail.' },
   { v: '15+', t: 'Colours, or blend your own', d: 'Pick from fifteen shades, or mix two or more for a colour that is yours alone.' },
-  { v: '100%', t: 'Cotton wicks', d: 'Lead-free and sized to each shape for a full, even melt.' },
+  { v: '100%', t: 'Cotton wicks', d: 'Lead-free and sized to each candle for a full, even melt.' },
 ];
 
 const GALLERY = [
@@ -63,9 +63,9 @@ export function Home() {
   const { settings, reviews, categories, liveSeasons, active, shelf } = useApp();
   const trust = [
     { h: 'Free delivery', t: 'On orders over ' + money(settings.freeOver) },
-    { h: 'Hand-poured', t: 'Small batches, cured for 14 days' },
+    { h: 'Hand-poured', t: 'Small batches, set with care' },
     { h: 'Soy wax, non-toxic', t: 'Poured by hand, with care' },
-    { h: 'Made in Sri Lanka', t: 'Pickup, bank transfer or card' },
+    { h: 'Made in Sri Lanka', t: 'Pay by bank transfer' },
   ];
   return (
     <>

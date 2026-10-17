@@ -8,7 +8,7 @@ import { Product } from './pages/Product';
 import { Cart } from './pages/Cart';
 import { Checkout } from './pages/Checkout';
 import { Order } from './pages/Order';
-import { Forgot, Login, Register } from './pages/Auth';
+import { Forgot, Login, Register, Reset } from './pages/Auth';
 import { Account } from './pages/Account';
 import { Gifts } from './pages/Gifts';
 import { Finder } from './pages/Finder';
@@ -30,6 +30,7 @@ function Page({ route }: { route: Route }) {
     case 'login': return <Login route={route} />;
     case 'register': return <Register />;
     case 'forgot': return <Forgot />;
+    case 'reset': return <Reset />;
     case 'account': return <Account route={route} />;
     case 'track': return <Track />;
     case 'gifts': return <Gifts />;

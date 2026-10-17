@@ -94,8 +94,19 @@ export function money(n: number): string {
 
 export const DEFAULT_SETTINGS: Settings = {
   shop: 'Ember & Eve', email: 'hello@emberandeve.example', standard: 450, express: 900, freeOver: 8000, giftWrap: 300,
-  freeColors: 3, extraColorFee: 100, giftBoxFee: 1000,
+  freeColors: 3, extraColorFee: 100, giftBoxFee: 1000, giftBoxes: [], districts: [],
+  pickupAddress: '', whatsapp: '', bank: { bank: '', name: '', number: '', branch: '' },
+  pay: { card: false, bank: true, whatsapp: false, store: false }, payhereMerchantId: '', payhereSandbox: true,
 };
+
+/** Settings saved before a field existed simply lack it; fill in the defaults. */
+export const withDefaults = (s: Partial<Settings> | undefined): Settings => ({
+  ...DEFAULT_SETTINGS, ...s,
+  bank: { ...DEFAULT_SETTINGS.bank, ...s?.bank },
+  pay: { ...DEFAULT_SETTINGS.pay, ...s?.pay },
+});
+
+export const SL_DISTRICTS = ['Ampara', 'Anuradhapura', 'Badulla', 'Batticaloa', 'Colombo', 'Galle', 'Gampaha', 'Hambantota', 'Jaffna', 'Kalutara', 'Kandy', 'Kegalle', 'Kilinochchi', 'Kurunegala', 'Mannar', 'Matale', 'Matara', 'Monaragala', 'Mullaitivu', 'Nuwara Eliya', 'Polonnaruwa', 'Puttalam', 'Ratnapura', 'Trincomalee', 'Vavuniya'];
 
 export const STATUS_COLORS: Record<OrderStatus, [string, string]> = {
   Processing: ['#FEF3C7', '#8A4B00'],
@@ -170,8 +181,10 @@ export function starterCatalog() {
   };
 }
 
+const SEED_KEY = 'seeded_v5';
+
 function seed() {
-  if (remote || get('seeded_v5', false)) return;
+  if (remote || get(SEED_KEY, false)) return;
   const day = 86400000, now = Date.now();
   const ago = (d: number) => new Date(now - d * day).toISOString();
   const { products } = starterCatalog();
@@ -213,7 +226,7 @@ function seed() {
     { id: 3, pid: 4, who: 'Dilini, Galle', stars: 5, q: 'Ordered a custom blend for my sister. She loved it.', date: '2026-09-22', approved: true },
     { id: 4, pid: 13, who: 'Sachini, Negombo', stars: 4, q: 'Lovely glass candle. Arrived well packed.', date: '2026-09-25', approved: true },
   ]);
-  set('seeded_v3', true);
+  set(SEED_KEY, true);
 }
 seed();
 

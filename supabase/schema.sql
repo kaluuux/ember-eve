@@ -1,17 +1,34 @@
--- Ember & Eve: shared catalogue, orders and admin access.
--- Run this once in the Supabase dashboard: SQL Editor > New query > paste > Run.
--- Safe to re-run.
+-- Ember & Eve: shared catalogue, orders, customers and admin access.
+-- Run this whole file in the Supabase dashboard: SQL Editor > New query > paste > Run.
+-- It is safe to re-run after every update.
 
--- ---------------------------------------------------------------- admins
+-- ================================================================== admins
 create table if not exists admins (email text primary key);
+alter table admins enable row level security;
 
 create or replace function is_admin() returns boolean
 language sql stable security definer set search_path = public as $$
   select exists (select 1 from admins where lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')));
 $$;
+grant execute on function is_admin() to anon, authenticated;
 
--- --------------------------------------------- catalogue (products, colours, ...)
--- One row per collection: products, colors, categories, seasons, settings, discounts.
+drop policy if exists "admins manage admins" on admins;
+create policy "admins manage admins" on admins for all using (is_admin()) with check (is_admin());
+
+create or replace function admins_keep_one() returns trigger language plpgsql as $$
+begin
+  if (select count(*) from admins) <= 1 then raise exception 'cannot remove the last admin'; end if;
+  return old;
+end $$;
+drop trigger if exists admins_keep_one on admins;
+create trigger admins_keep_one before delete on admins for each row execute function admins_keep_one();
+
+-- ================================================================== helpers
+create or replace function ee_ip() returns text language sql stable as $$
+  select split_part(coalesce(current_setting('request.headers', true)::json ->> 'x-forwarded-for', ''), ',', 1);
+$$;
+
+-- ================================================================== catalogue
 create table if not exists catalog_kv (
   key text primary key,
   value jsonb not null,
@@ -20,11 +37,39 @@ create table if not exists catalog_kv (
 alter table catalog_kv enable row level security;
 drop policy if exists "catalog readable by everyone" on catalog_kv;
 drop policy if exists "catalog writable by admin" on catalog_kv;
--- Discount codes are not public: only expose the other keys.
+-- Discount codes are not public.
 create policy "catalog readable by everyone" on catalog_kv for select using (key <> 'discounts' or is_admin());
 create policy "catalog writable by admin" on catalog_kv for all using (is_admin()) with check (is_admin());
 
--- ---------------------------------------------------------------- orders
+-- ================================================================== customers
+create table if not exists profiles (
+  id uuid primary key references auth.users on delete cascade,
+  email text,
+  name text,
+  address jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+alter table profiles enable row level security;
+drop policy if exists "own profile read" on profiles;
+drop policy if exists "own profile update" on profiles;
+drop policy if exists "admin reads profiles" on profiles;
+create policy "own profile read" on profiles for select using (id = auth.uid());
+create policy "own profile update" on profiles for update using (id = auth.uid()) with check (id = auth.uid());
+create policy "admin reads profiles" on profiles for select using (is_admin());
+
+create or replace function handle_new_user() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into profiles (id, email, name)
+  values (new.id, new.email, coalesce(nullif(new.raw_user_meta_data ->> 'name', ''), split_part(new.email, '@', 1)))
+  on conflict (id) do nothing;
+  return new;
+end $$;
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created after insert on auth.users for each row execute function handle_new_user();
+insert into profiles (id, email, name) select id, email, split_part(email, '@', 1) from auth.users on conflict (id) do nothing;
+
+-- ================================================================== orders
 create table if not exists orders (
   id text primary key,
   data jsonb not null,
@@ -32,67 +77,341 @@ create table if not exists orders (
   status text not null default 'Processing',
   created_at timestamptz not null default now()
 );
+alter table orders add column if not exists user_id uuid;
+alter table orders add column if not exists ip text;
 alter table orders enable row level security;
 drop policy if exists "orders admin only" on orders;
 create policy "orders admin only" on orders for all using (is_admin()) with check (is_admin());
 
--- Customers never read or write orders directly; they go through these functions.
-create or replace function place_order(o jsonb) returns text
-language plpgsql security definer set search_path = public as $$
+-- Price one candle from the live catalogue. Raises on any invalid option or colour.
+create or replace function ee_price(p jsonb, sel jsonb, st jsonb, pal jsonb) returns jsonb
+language plpgsql stable as $$
 declare
-  new_id text;
-  n int;
-  item jsonb;
-  prods jsonb;
+  g jsonb; o jsonb; want text; adds numeric := 0; parts text[] := '{}';
+  allowed text[] := null; palids text[]; col text; blend text[]; fee numeric := 0;
+  hex text := '#EADFD3'; names text[]; list numeric; unit numeric; stick text;
 begin
-  select coalesce(max((regexp_replace(id, '\D', '', 'g'))::int), 1000) + 1 into n from orders;
-  new_id := 'EE-' || n;
-  select value into prods from catalog_kv where key = 'products' for update;
-  -- reduce stock for limited-stock products
-  for item in select * from jsonb_array_elements(o -> 'items') loop
-    if (item ->> 'pid')::int > 0 then
-      prods := (
-        select jsonb_agg(
-          case when (p ->> 'id')::bigint = (item ->> 'pid')::bigint and p -> 'stock' <> 'null'::jsonb
-            then jsonb_set(p, '{stock}', to_jsonb(greatest(0, (p ->> 'stock')::int - (item ->> 'qty')::int)))
-            else p end)
-        from jsonb_array_elements(prods) p);
+  select coalesce(array_agg(c ->> 'id'), '{}') into palids from jsonb_array_elements(pal) c;
+  for g in select * from jsonb_array_elements(coalesce(p -> 'groups', '[]'::jsonb)) loop
+    want := sel -> 'opts' ->> (g ->> 'id');
+    o := null;
+    if want is not null then
+      select x into o from jsonb_array_elements(g -> 'options') x where x ->> 'id' = want limit 1;
+      if o is null then raise exception 'bad_option:%', p ->> 'name'; end if;
+    else
+      o := g -> 'options' -> 0;
+    end if;
+    if o is null then raise exception 'bad_option:%', p ->> 'name'; end if;
+    adds := adds + coalesce((o ->> 'add')::numeric, 0);
+    parts := parts || ((g ->> 'label') || ': ' || (o ->> 'label'));
+    if jsonb_typeof(o -> 'colors') = 'array' and jsonb_array_length(o -> 'colors') > 0 then
+      if allowed is null then
+        allowed := array(select jsonb_array_elements_text(o -> 'colors'));
+      else
+        allowed := array(select a from unnest(allowed) a where a in (select jsonb_array_elements_text(o -> 'colors')));
+      end if;
     end if;
   end loop;
-  update catalog_kv set value = prods, updated_at = now() where key = 'products';
-  insert into orders (id, data, email, status)
-  values (new_id, jsonb_set(o, '{id}', to_jsonb(new_id)), lower(o ->> 'email'), 'Processing');
-  return new_id;
+
+  if coalesce((p ->> 'colors')::boolean, false) then
+    allowed := array(select a from unnest(coalesce(allowed, palids)) a where a = any(palids));
+    if cardinality(allowed) = 0 then allowed := palids; end if;
+    col := coalesce(sel ->> 'color', '');
+    if col = '' then col := allowed[1]; end if;
+    if col = 'custom' then
+      if not coalesce((p ->> 'custom')::boolean, false) or cardinality(allowed) < 2 then
+        raise exception 'bad_color:%', p ->> 'name';
+      end if;
+      select array_agg(x order by ord) into blend from (
+        select distinct on (x) x, ord from jsonb_array_elements_text(coalesce(sel -> 'blend', '[]'::jsonb)) with ordinality t(x, ord) order by x, ord
+      ) s;
+      blend := coalesce(blend, '{}');
+      if cardinality(blend) < 2 or exists (select 1 from unnest(blend) b where b <> all(allowed)) then
+        raise exception 'bad_blend:%', p ->> 'name';
+      end if;
+      fee := greatest(0, cardinality(blend) - (st ->> 'freeColors')::int) * (st ->> 'extraColorFee')::numeric;
+      select array_agg(pc ->> 'name' order by array_position(blend, pc ->> 'id')) into names
+        from jsonb_array_elements(pal) pc where pc ->> 'id' = any(blend);
+      parts := parts || ('Colour: Custom blend (' || array_to_string(names, ' + ') || ')');
+      select pc ->> 'hex' into hex from jsonb_array_elements(pal) pc where pc ->> 'id' = blend[1];
+    else
+      if col <> all(allowed) then raise exception 'bad_color:%', p ->> 'name'; end if;
+      select pc ->> 'hex', pc ->> 'name' into hex, stick from jsonb_array_elements(pal) pc where pc ->> 'id' = col;
+      parts := parts || ('Colour: ' || stick);
+    end if;
+  end if;
+
+  stick := left(btrim(coalesce(sel ->> 'sticker', '')), 60);
+  if coalesce((p ->> 'sticker')::boolean, false) and stick <> '' then
+    parts := parts || ('Sticker: "' || replace(stick, '"', '''') || '"');
+  end if;
+
+  list := (p ->> 'base')::numeric + adds;
+  unit := round(list * (1 - coalesce((p ->> 'salePct')::numeric, 0) / 100.0)) + fee;
+  if unit < 0 then raise exception 'bad_price:%', p ->> 'name'; end if;
+  return jsonb_build_object('unit', unit, 'desc', array_to_string(parts, ' · '), 'hex', hex);
 end $$;
 
--- Look up one order by id + the email it was placed with (used by Track Order and the confirmation page).
+-- Rebuild a whole order from the live catalogue: prices, stock check, discount, delivery and totals.
+-- Nothing the browser says about money is trusted; only choices (product, options, colours).
+create or replace function ee_build_order(o jsonb) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare
+  defaults jsonb := '{"standard":450,"express":900,"freeOver":8000,"giftWrap":300,"freeColors":3,"extraColorFee":100,"giftBoxFee":1000,"giftBoxes":[],"districts":[],"pay":{"card":false,"bank":true,"whatsapp":false,"store":false}}';
+  st jsonb; prods jsonb; pal jsonb; discs jsonb;
+  it jsonb; c jsonb; p jsonb; r jsonb; cfg jsonb;
+  items jsonb := '[]'; need jsonb := '{}'; box jsonb;
+  qty int; unit numeric; fee numeric; sub numeric := 0; parts text[]; slots int; n int;
+  code text; dsc jsonb; disc numeric := 0; free_ship boolean := false;
+  ship_m text; ship numeric; wrap numeric := 0; net numeric; district text; rate numeric;
+  pay_m text; pay_label text; nm text; ph text; em text; a1 text; city text; payset jsonb;
+  pid_txt text; stock_txt text; first_hex text; now_iso text := to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"');
+begin
+  st := defaults || coalesce((select value from catalog_kv where key = 'settings'), '{}'::jsonb);
+  prods := coalesce((select value from catalog_kv where key = 'products'), '[]'::jsonb);
+  pal := coalesce((select value from catalog_kv where key = 'colors'), '[]'::jsonb);
+  discs := coalesce((select value from catalog_kv where key = 'discounts'), '[]'::jsonb);
+  payset := coalesce(st -> 'pay', defaults -> 'pay');
+
+  em := lower(btrim(coalesce(o ->> 'email', '')));
+  nm := btrim(coalesce(o ->> 'name', ''));
+  ph := btrim(coalesce(o ->> 'phone', ''));
+  a1 := btrim(coalesce(o #>> '{address,a1}', ''));
+  city := btrim(coalesce(o #>> '{address,city}', ''));
+  district := btrim(coalesce(o #>> '{address,district}', ''));
+  ship_m := coalesce(o ->> 'shipM', 'standard');
+  if ship_m not in ('standard', 'express', 'pickup') then ship_m := 'standard'; end if;
+  if em !~ '^\S+@\S+\.\S+$' then raise exception 'invalid:email'; end if;
+  if nm = '' or ph = '' then raise exception 'invalid:contact'; end if;
+  if ship_m <> 'pickup' and (a1 = '' or city = '') then raise exception 'invalid:address'; end if;
+  if jsonb_typeof(o -> 'items') <> 'array' or jsonb_array_length(o -> 'items') = 0 or jsonb_array_length(o -> 'items') > 30 then
+    raise exception 'invalid:items';
+  end if;
+
+  for it in select * from jsonb_array_elements(o -> 'items') loop
+    qty := least(10, greatest(1, coalesce((it ->> 'qty')::int, 1)));
+    if jsonb_typeof(it -> 'box') = 'array' then
+      -- gift box: a set of candles plus the box fee
+      slots := jsonb_array_length(it -> 'box');
+      cfg := null;
+      if it ->> 'boxId' is not null then
+        select x into cfg from jsonb_array_elements(st -> 'giftBoxes') x where x ->> 'id' = it ->> 'boxId' limit 1;
+      end if;
+      if cfg is not null then
+        if slots <> (cfg ->> 'slots')::int then raise exception 'invalid:box'; end if;
+        fee := (cfg ->> 'fee')::numeric;
+      else
+        if slots < 2 or slots > 8 then raise exception 'invalid:box'; end if;
+        fee := (st ->> 'giftBoxFee')::numeric;
+      end if;
+      unit := fee; parts := '{}'; box := '[]'; first_hex := null;
+      for c in select * from jsonb_array_elements(it -> 'box') loop
+        select x into p from jsonb_array_elements(prods) x where (x ->> 'id') = (c ->> 'pid') limit 1;
+        if p is null or not coalesce((p ->> 'active')::boolean, false) then raise exception 'unavailable:%', coalesce(c ->> 'pid', '?'); end if;
+        r := ee_price(p, c -> 'sel', st, pal);
+        unit := unit + (r ->> 'unit')::numeric;
+        parts := parts || ((p ->> 'name') || ' [' || (r ->> 'desc') || ']');
+        box := box || jsonb_build_object('pid', (p ->> 'id')::bigint, 'name', p ->> 'name');
+        first_hex := coalesce(first_hex, r ->> 'hex');
+        need := jsonb_set(need, array[p ->> 'id'], to_jsonb(coalesce((need ->> (p ->> 'id'))::int, 0) + qty));
+      end loop;
+      items := items || jsonb_build_object('pid', 0, 'name', 'Gift Box (' || slots || ' candles)', 'sub', array_to_string(parts, '; '),
+        'qty', qty, 'unit', unit, 'tint', coalesce(first_hex, '#EADFD3'), 'box', box,
+        'note', left(btrim(coalesce(it ->> 'note', '')), 250));
+    else
+      select x into p from jsonb_array_elements(prods) x where (x ->> 'id') = (it ->> 'pid') limit 1;
+      if p is null or not coalesce((p ->> 'active')::boolean, false) then raise exception 'unavailable:%', coalesce(it ->> 'pid', '?'); end if;
+      r := ee_price(p, it -> 'sel', st, pal);
+      unit := (r ->> 'unit')::numeric;
+      need := jsonb_set(need, array[p ->> 'id'], to_jsonb(coalesce((need ->> (p ->> 'id'))::int, 0) + qty));
+      items := items || jsonb_build_object('pid', (p ->> 'id')::bigint, 'name', p ->> 'name', 'sub', r ->> 'desc',
+        'qty', qty, 'unit', unit, 'tint', r ->> 'hex');
+    end if;
+    sub := sub + unit * qty;
+  end loop;
+
+  -- stock: every candle (including those inside gift boxes) must be available
+  for pid_txt in select k from jsonb_object_keys(need) k loop
+    select x into p from jsonb_array_elements(prods) x where (x ->> 'id') = pid_txt limit 1;
+    stock_txt := p ->> 'stock';
+    if stock_txt is not null and stock_txt::int < (need ->> pid_txt)::int then
+      raise exception 'out_of_stock:%', p ->> 'name';
+    end if;
+  end loop;
+
+  -- discount code
+  code := upper(btrim(coalesce(o ->> 'code', '')));
+  if code <> '' then
+    select d into dsc from jsonb_array_elements(discs) d
+      where coalesce((d ->> 'active')::boolean, false) and upper(d ->> 'code') = code limit 1;
+    if dsc is not null and sub >= coalesce((dsc ->> 'min')::numeric, 0) then
+      if dsc ->> 'type' = 'pct' then disc := round(sub * (dsc ->> 'value')::numeric / 100);
+      elsif dsc ->> 'type' = 'fixed' then disc := least((dsc ->> 'value')::numeric, sub);
+      else free_ship := true; end if;
+    else
+      code := '';
+    end if;
+  end if;
+  net := sub - disc;
+
+  -- delivery
+  if ship_m = 'pickup' then ship := 0;
+  elsif ship_m = 'express' then ship := (st ->> 'express')::numeric;
+  elsif net >= (st ->> 'freeOver')::numeric or free_ship then ship := 0;
+  else
+    select (x ->> 'rate')::numeric into rate from jsonb_array_elements(st -> 'districts') x where lower(x ->> 'name') = lower(district) limit 1;
+    ship := coalesce(rate, (st ->> 'standard')::numeric);
+  end if;
+  if coalesce((o ->> 'wrap')::boolean, false) then wrap := (st ->> 'giftWrap')::numeric; end if;
+
+  -- payment method
+  pay_m := coalesce(o ->> 'payMethod', 'bank');
+  if pay_m = 'card' and coalesce((payset ->> 'card')::boolean, false) then pay_label := 'Card (PayHere)';
+  elsif pay_m = 'bank' and coalesce((payset ->> 'bank')::boolean, false) then pay_label := 'Bank transfer';
+  elsif pay_m = 'whatsapp' and coalesce((payset ->> 'whatsapp')::boolean, false) then pay_label := 'WhatsApp order';
+  elsif pay_m = 'store' and coalesce((payset ->> 'store')::boolean, false) and ship_m = 'pickup' then pay_label := 'Pay at store pickup';
+  else raise exception 'invalid:payment';
+  end if;
+
+  return jsonb_build_object(
+    'date', now_iso, 'email', em, 'name', nm, 'first', left(btrim(coalesce(o ->> 'first', '')), 80), 'phone', ph,
+    'address', jsonb_build_object('a1', a1, 'a2', btrim(coalesce(o #>> '{address,a2}', '')), 'city', city, 'district', district, 'post', btrim(coalesce(o #>> '{address,post}', ''))),
+    'items', items, 'sub', sub, 'disc', disc, 'code', code, 'ship', ship, 'shipM', ship_m, 'wrap', wrap, 'total', net + ship + wrap,
+    'status', 'Processing', 'pay', pay_label, 'payMethod', pay_m, 'payStatus', 'Pending',
+    'note', left(btrim(coalesce(o ->> 'note', '')), 500), 'sellerNote', left(btrim(coalesce(o ->> 'sellerNote', '')), 1000),
+    'userId', auth.uid()::text, 'log', jsonb_build_array(jsonb_build_object('s', 'Placed', 'd', now_iso)),
+    '_need', need);
+end $$;
+
+-- Preview the authoritative totals before the customer pays. Writes nothing.
+create or replace function quote_order(o jsonb) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select ee_build_order(o) - '_need';
+$$;
+
+-- place_order used to return text; Postgres cannot change a return type in place.
+drop function if exists place_order(jsonb);
+create or replace function place_order(o jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  b jsonb; need jsonb; new_id text; n int; v_ip text := ee_ip();
+begin
+  if v_ip <> '' and (select count(*) from orders where orders.ip = v_ip and created_at > now() - interval '1 hour') >= 15 then
+    raise exception 'rate_limited';
+  end if;
+  perform 1 from catalog_kv where key = 'products' for update;  -- serialise stock changes
+  b := ee_build_order(o);
+  need := b -> '_need';
+  select coalesce(max((regexp_replace(id, '\D', '', 'g'))::int), 1000) + 1 into n from orders;
+  new_id := 'EE-' || n;
+  update catalog_kv set updated_at = now(), value = (
+    select coalesce(jsonb_agg(
+      case when e ? 'stock' and jsonb_typeof(e -> 'stock') = 'number' and need ? (e ->> 'id')
+        then jsonb_set(e, '{stock}', to_jsonb(greatest(0, (e ->> 'stock')::int - (need ->> (e ->> 'id'))::int)))
+        else e end order by ord), '[]'::jsonb)
+    from jsonb_array_elements(value) with ordinality t(e, ord))
+  where key = 'products';
+  b := (b - '_need') || jsonb_build_object('id', new_id);
+  insert into orders (id, data, email, status, user_id, ip) values (new_id, b, b ->> 'email', 'Processing', auth.uid(), nullif(v_ip, ''));
+  return b;
+end $$;
+
 create or replace function get_order(oid text, mail text) returns jsonb
 language sql stable security definer set search_path = public as $$
-  select data || jsonb_build_object('status', status) from orders where id = oid and email = lower(mail);
+  select data || jsonb_build_object('status', status, 'id', id) from orders where id = oid and email = lower(btrim(mail));
 $$;
 
--- Public sales counts for the Best Selling / Trending shelves (no customer data).
+-- Orders belonging to the signed-in customer.
+create or replace function my_orders() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(data || jsonb_build_object('status', status, 'id', id) order by created_at desc), '[]'::jsonb)
+  from orders where user_id = auth.uid() and auth.uid() is not null;
+$$;
+
+-- Units sold per product (including candles inside gift boxes) for Best Selling / Trending. No customer data.
 create or replace function sales_summary() returns table (pid int, qty int, last_30 int)
 language sql stable security definer set search_path = public as $$
-  select (i ->> 'pid')::int,
-         sum((i ->> 'qty')::int)::int,
-         sum(case when o.created_at > now() - interval '30 days' then (i ->> 'qty')::int else 0 end)::int
-  from orders o, jsonb_array_elements(o.data -> 'items') i
-  where o.status <> 'Cancelled' and (i ->> 'pid')::int > 0
-  group by 1;
+  select s.pid, sum(s.qty)::int, sum(s.recent)::int from (
+    select (i ->> 'pid')::int as pid, (i ->> 'qty')::int as qty,
+           case when o.created_at > now() - interval '30 days' then (i ->> 'qty')::int else 0 end as recent
+    from orders o, jsonb_array_elements(o.data -> 'items') i
+    where o.status <> 'Cancelled' and (i ->> 'pid')::int > 0
+    union all
+    select (c ->> 'pid')::int, (i ->> 'qty')::int,
+           case when o.created_at > now() - interval '30 days' then (i ->> 'qty')::int else 0 end
+    from orders o, jsonb_array_elements(o.data -> 'items') i, jsonb_array_elements(i -> 'box') c
+    where o.status <> 'Cancelled' and jsonb_typeof(i -> 'box') = 'array'
+  ) s group by s.pid;
 $$;
 
+create or replace function check_discount(c text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select d from catalog_kv k, jsonb_array_elements(k.value) d
+  where k.key = 'discounts' and (d ->> 'active')::boolean and upper(d ->> 'code') = upper(btrim(c))
+  limit 1;
+$$;
+
+grant execute on function quote_order(jsonb) to anon, authenticated;
 grant execute on function place_order(jsonb) to anon, authenticated;
 grant execute on function get_order(text, text) to anon, authenticated;
+grant execute on function my_orders() to authenticated;
 grant execute on function sales_summary() to anon, authenticated;
+grant execute on function check_discount(text) to anon, authenticated;
 
--- --------------------------------------------------------- reviews and messages
+-- ================================================================== bank transfer receipts
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('receipts', 'receipts', false, 5242880, array['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf'])
+on conflict (id) do update set file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types, public = false;
+
+-- A receipt can be uploaded only for a recent bank-transfer order that has fewer than 3 receipts.
+create or replace function ee_order_open(oid text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from orders
+    where id = oid and created_at > now() - interval '3 days'
+      and coalesce(data ->> 'payMethod', '') = 'bank'
+      and coalesce(data ->> 'payStatus', 'Pending') <> 'Paid'
+      and jsonb_array_length(coalesce(data -> 'receipts', '[]'::jsonb)) < 3);
+$$;
+grant execute on function ee_order_open(text) to anon, authenticated;
+
+drop policy if exists "receipt upload" on storage.objects;
+drop policy if exists "receipt admin read" on storage.objects;
+drop policy if exists "receipt admin delete" on storage.objects;
+create policy "receipt upload" on storage.objects for insert to anon, authenticated
+  with check (bucket_id = 'receipts' and ee_order_open((storage.foldername(name))[1]));
+create policy "receipt admin read" on storage.objects for select using (bucket_id = 'receipts' and is_admin());
+create policy "receipt admin delete" on storage.objects for delete using (bucket_id = 'receipts' and is_admin());
+
+-- After uploading, the customer records the file against their order (order id + email must match).
+create or replace function attach_receipt(oid text, mail text, path text) returns boolean
+language plpgsql security definer set search_path = public as $$
+begin
+  update orders set data = jsonb_set(jsonb_set(data, '{receipts}', coalesce(data -> 'receipts', '[]'::jsonb) || to_jsonb(path)), '{payStatus}', '"Receipt sent"')
+  where id = oid and email = lower(btrim(mail)) and path like oid || '/%'
+    and coalesce(data ->> 'payStatus', 'Pending') <> 'Paid'
+    and jsonb_array_length(coalesce(data -> 'receipts', '[]'::jsonb)) < 3;
+  return found;
+end $$;
+grant execute on function attach_receipt(text, text, text) to anon, authenticated;
+
+-- Admin changes only the fields they touched, so a receipt uploaded at the same moment is never overwritten.
+create or replace function admin_patch_order(oid text, patch jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'not allowed'; end if;
+  update orders set data = data || patch, status = coalesce(patch ->> 'status', status) where id = oid;
+end $$;
+grant execute on function admin_patch_order(text, jsonb) to authenticated;
+
+-- ================================================================== reviews and messages
 create table if not exists reviews (
   id bigint generated always as identity primary key,
   data jsonb not null,
   approved boolean not null default false,
   created_at timestamptz not null default now()
 );
+alter table reviews add column if not exists ip text;
 alter table reviews enable row level security;
 drop policy if exists "approved reviews public" on reviews;
 drop policy if exists "anyone can submit a review" on reviews;
@@ -107,25 +426,32 @@ create table if not exists messages (
   is_read boolean not null default false,
   created_at timestamptz not null default now()
 );
+alter table messages add column if not exists ip text;
 alter table messages enable row level security;
 drop policy if exists "anyone can send a message" on messages;
 drop policy if exists "messages admin" on messages;
 create policy "anyone can send a message" on messages for insert with check (is_read = false);
 create policy "messages admin" on messages for all using (is_admin()) with check (is_admin());
 
--- ------------------------------------------------------------ v2 additions
-alter table admins enable row level security;   -- no policies: nobody can read it directly
-grant execute on function is_admin() to anon, authenticated;
+-- Spam protection: at most 5 reviews and 5 messages per visitor per hour, and small payloads only.
+create or replace function ee_limit_inserts() returns trigger language plpgsql security definer set search_path = public as $$
+declare cnt int;
+begin
+  if is_admin() then return new; end if;
+  if length(new.data::text) > 3000 then raise exception 'too_large'; end if;
+  new.ip := nullif(ee_ip(), '');
+  if new.ip is not null then
+    execute format('select count(*) from %I where ip = $1 and created_at > now() - interval ''1 hour''', tg_table_name) into cnt using new.ip;
+    if cnt >= 5 then raise exception 'rate_limited'; end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists reviews_limit on reviews;
+create trigger reviews_limit before insert on reviews for each row execute function ee_limit_inserts();
+drop trigger if exists messages_limit on messages;
+create trigger messages_limit before insert on messages for each row execute function ee_limit_inserts();
 
--- Customers validate a discount code without being able to list all codes.
-create or replace function check_discount(c text) returns jsonb
-language sql stable security definer set search_path = public as $$
-  select d from catalog_kv k, jsonb_array_elements(k.value) d
-  where k.key = 'discounts' and (d ->> 'active')::boolean and upper(d ->> 'code') = upper(trim(c))
-  limit 1;
-$$;
-grant execute on function check_discount(text) to anon, authenticated;
-
--- ------------------------------------------------------ after running this file
--- 1. Authentication > Users > Add user: create the admin login (email + password).
+-- ================================================================== after running this file
+-- 1. Authentication > Users > Add user: create your admin login (email + password).
 -- 2. Run:  insert into admins (email) values ('your-admin@email.com');
+--    More admins can be added later from the app: Admin > Settings > Admins.

@@ -1,10 +1,10 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { CartLine, Category, Color, Discount, Order, Product, Review, Season, Session, Settings, User } from './types';
-import { DEFAULT_SETTINGS, EMPTY, get, set, useStored } from './store';
+import { DEFAULT_SETTINGS, EMPTY, get, set, useStored, withDefaults } from './store';
 import { computeTotals, describe, normalize, selectionTint, salesFromOrders, shelfProducts, unitPrice, visibleProducts, blendValid, type Selection, type Shelf, type Totals } from './commerce';
 import { go } from './router';
 import { remote } from './remote';
-import { checkDiscount } from './sync';
+import { checkDiscount, customerSignOut } from './sync';
 import type { Sales } from './commerce';
 
 export interface QuickView { id: number; sel: Selection }
@@ -65,7 +65,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const seasons = useStored<Season[]>('seasons', EMPTY);
   const orders = useStored<Order[]>('orders', EMPTY);
   const salesStored = useStored<Sales>('sales', NO_SALES);
-  const settings = useStored<Settings>('settings', DEFAULT_SETTINGS);
+  const settingsRaw = useStored<Settings>('settings', DEFAULT_SETTINGS);
+  const settings = useMemo(() => withDefaults(settingsRaw), [settingsRaw]);
   const reviewsAll = useStored<Review[]>('reviews', EMPTY);
   const discounts = useStored<Discount[]>('discounts', EMPTY);
   const cart = useStored<CartLine[]>('cart', EMPTY);
@@ -108,7 +109,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const p = get<Product[]>('products', []).find((x) => x.id === pid);
     if (!p) return false;
     const palette = get<Color[]>('colors', []);
-    const st = get<Settings>('settings', DEFAULT_SETTINGS);
+    const st = withDefaults(get<Settings>('settings', DEFAULT_SETTINGS));
     const sel = normalize(p, raw, palette);
     if (!blendValid(sel)) { flash('Pick at least 2 colours for a custom blend'); return false; }
     const key = [pid, JSON.stringify(sel.opts), sel.color, sel.blend.join('+'), sel.sticker?.trim() ?? ''].join('|');
@@ -119,7 +120,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const n = Math.min(sel.qty, room);
     if (n <= 0) { flash(p.stock === 0 ? 'Sold out' : 'Only ' + p.stock + ' in stock'); return false; }
     if (i >= 0) cur[i] = { ...cur[i], qty: cur[i].qty + n };
-    else cur.push({ key, pid, name: p.name, sub: describe(p, sel, palette), unit: unitPrice(p, sel, st), tint: selectionTint(sel, palette), qty: n });
+    else cur.push({ key, pid, sel: { opts: sel.opts, color: sel.color, blend: sel.blend, ...(sel.sticker?.trim() ? { sticker: sel.sticker.trim() } : {}) }, name: p.name, sub: describe(p, sel, palette), unit: unitPrice(p, sel, st), tint: selectionTint(sel, palette), qty: n });
     set('cart', cur);
     flash(n < sel.qty ? 'Added ' + n + ' (stock limit)' : 'Added to basket');
     return true;
@@ -157,7 +158,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = useCallback((u: User | Session) => set<Session>('session', { id: u.id, name: u.name, email: u.email }), []);
-  const signOut = useCallback(() => { set('session', null); flash('Signed out'); go(''); }, [flash]);
+  const signOut = useCallback(() => { if (remote) void customerSignOut(); set('session', null); flash('Signed out'); go(''); }, [flash]);
   const acceptCookie = useCallback(() => set('cookie', true), []);
 
   const value: Ctx = {

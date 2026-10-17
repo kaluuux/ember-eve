@@ -184,3 +184,7 @@ button { color: inherit; }
 .dd-menu a:first-child { padding-top: 14px; }
 .dd-menu a:last-child { padding-bottom: 14px; }
 .dd-menu a:hover { color: #D9CCBF; background: rgba(255, 255, 255, 0.06); }
+
+/* shared by checkout, order page and admin */
+.row-between { display: flex; justify-content: space-between; align-items: center; }
+.bank-box { background: var(--cream); border: 1px solid var(--sand); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }

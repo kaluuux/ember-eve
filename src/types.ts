@@ -44,6 +44,10 @@ export interface Discount {
   note?: string;
 }
 
+export type PayMethod = 'card' | 'bank' | 'whatsapp' | 'store';
+export interface GiftBox { id: string; label: string; slots: number; fee: number }
+export interface District { name: string; rate: number }
+
 export interface Settings {
   shop: string;
   email: string;
@@ -55,17 +59,33 @@ export interface Settings {
   freeColors: number;
   extraColorFee: number;
   giftBoxFee: number;
+  /** Optional fixed box sizes. Empty = any 2 to 8 candles at `giftBoxFee`. */
+  giftBoxes: GiftBox[];
+  /** Per-district standard delivery rate; districts not listed use `standard` */
+  districts: District[];
+  pickupAddress: string;
+  /** Number in international format without +, e.g. 94771234567 */
+  whatsapp: string;
+  bank: { bank: string; name: string; number: string; branch: string };
+  pay: Record<PayMethod, boolean>;
+  payhereMerchantId: string;
+  payhereSandbox: boolean;
 }
 
-export interface Address { first?: string; last?: string; phone?: string; a1?: string; a2?: string; city?: string; post?: string }
+export interface Address { district?: string; first?: string; last?: string; phone?: string; a1?: string; a2?: string; city?: string; post?: string }
 
 export interface User { id: number; name: string; email: string; password: string; address: Address; joined: string }
-export interface Session { id: number; name: string; email: string }
+export interface Session { id: number | string; name: string; email: string }
 
 export interface CartLine {
   key: string;
   /** 0 for gift boxes */
   pid: number;
+  /** The customer's choices, sent to the server, which prices them itself */
+  sel?: ItemSel;
+  /** Gift box contents */
+  box?: { pid: number; sel: ItemSel }[];
+  boxId?: string;
   name: string;
   sub: string;
   unit: number;
@@ -75,7 +95,8 @@ export interface CartLine {
   note?: string;
 }
 
-export interface OrderItem { name: string; sub: string; qty: number; unit: number; tint: string; pid: number; note?: string }
+export interface ItemSel { opts: Record<string, string>; color: string; blend: string[]; sticker?: string }
+export interface OrderItem { name: string; sub: string; qty: number; unit: number; tint: string; pid: number; note?: string; box?: { pid: number; name: string }[] }
 export type OrderStatus = 'Processing' | 'Dispatched' | 'Delivered' | 'Cancelled';
 
 export interface Order {
@@ -85,21 +106,26 @@ export interface Order {
   name: string;
   first?: string;
   phone: string;
-  address: { a1: string; a2: string; city: string; post: string };
+  address: { a1: string; a2: string; city: string; district?: string; post: string };
   items: OrderItem[];
   sub: number;
   disc: number;
   code: string;
   ship: number;
-  shipM: 'standard' | 'express';
+  shipM: 'standard' | 'express' | 'pickup';
   wrap: number;
   total: number;
   status: OrderStatus;
   pay: string;
+  payMethod?: PayMethod;
+  payStatus?: 'Pending' | 'Receipt sent' | 'Paid' | 'Failed';
+  /** Storage paths of uploaded bank-transfer receipts */
+  receipts?: string[];
+  tracking?: { courier: string; number: string; url: string };
   note: string;
   /** Note from the buyer to the seller */
   sellerNote?: string;
-  userId: number | null;
+  userId: number | string | null;
   log: { s: string; d: string }[];
 }
 

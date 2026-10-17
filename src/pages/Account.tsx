@@ -3,7 +3,9 @@ import { useApp } from '../AppContext';
 import { Chip, ErrorText, Field, useForm } from '../components/ui';
 import { ProductCard } from '../components/ProductCard';
 import { orderView } from '../commerce';
-import { EMPTY, get, isEmail, money, set, useStored } from '../store';
+import { EMPTY, SL_DISTRICTS, get, isEmail, money, set, useStored } from '../store';
+import { remote } from '../remote';
+import { saveProfile, updatePassword } from '../sync';
 import type { Order, User } from '../types';
 import type { Route } from '../router';
 
@@ -19,9 +21,12 @@ export function Account({ route }: { route: Route }) {
   // header "Saved" link navigates here with ?tab=wish even when already on this page
   useEffect(() => { setTab(initial); }, [initial, route.q.tab]);
   const me = users.find((u) => u.id === user?.id);
-  const { bind, str } = useForm({ ...(me?.address ?? {}), dname: user?.name ?? '', demail: user?.email ?? '' });
+  const { bind, str, set: patch } = useForm({ ...(me?.address ?? {}), dname: user?.name ?? '', demail: user?.email ?? '' });
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
+  // the saved address can arrive from the server after first render
+  const addrKey = JSON.stringify(me?.address ?? {});
+  useEffect(() => { if (me) patch({ ...me.address, dname: me.name, demail: me.email }); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [me?.id, addrKey]);
 
   const myOrders = useMemo(
     () => (user ? orders.filter((o) => o.userId === user.id || o.email === user.email).reverse().map(orderView) : []),
@@ -43,16 +48,27 @@ export function Account({ route }: { route: Route }) {
 
   const pick = (t: Tab) => { setTab(t); setErr(''); setOk(''); };
 
-  const saveAddr = () => {
-    if (!str('a1').trim() || !str('city').trim() || !str('post').trim()) { setOk(''); return setErr('Address, town and postcode are required.'); }
+  const saveAddr = async () => {
+    if (!str('a1').trim() || !str('city').trim()) { setOk(''); return setErr('Address and town are required.'); }
+    if (remote) {
+      const e = await saveProfile({ address: { first: str('first'), last: str('last'), phone: str('phone'), a1: str('a1'), a2: str('a2'), city: str('city'), district: str('district'), post: str('post') } });
+      if (e) { setOk(''); return setErr(e); }
+      setErr(''); return setOk('Address saved.');
+    }
     set('users', get<User[]>('users', []).map((x) => (x.id === user.id ? { ...x, address: { first: str('first'), last: str('last'), phone: str('phone'), a1: str('a1'), a2: str('a2'), city: str('city'), post: str('post') } } : x)));
     setErr(''); setOk('Address saved.');
   };
 
-  const saveDetails = () => {
+  const saveDetails = async () => {
     if (!str('dname').trim() || !isEmail(str('demail'))) { setOk(''); return setErr('Enter a name and a valid email.'); }
     if (str('newpw') && str('newpw').length < 8) { setOk(''); return setErr('New password must be at least 8 characters.'); }
     const name = str('dname').trim(), email = str('demail').trim();
+    if (remote) {
+      let e = await saveProfile({ name });
+      if (!e && str('newpw')) e = await updatePassword(str('newpw'));
+      if (e) { setOk(''); return setErr(e); }
+      setErr(''); return setOk('Details saved.');
+    }
     set('users', get<User[]>('users', []).map((x) => (x.id === user.id ? { ...x, name, email, password: str('newpw') || x.password } : x)));
     signIn({ id: user.id, name, email });
     setErr(''); setOk('Details saved.');
@@ -111,7 +127,14 @@ export function Account({ route }: { route: Route }) {
           <div className="h3">Saved address</div>
           <div className="fields two">
             {f('first', 'First name')}{f('last', 'Last name')}{f('phone', 'Phone', { type: 'tel', span: 2 })}
-            {f('a1', 'Address', { span: 2 })}{f('a2', 'Flat, suite (optional)', { span: 2 })}{f('city', 'Town or city')}{f('post', 'Postcode')}
+            {f('a1', 'Address', { span: 2 })}{f('a2', 'Apartment, landmark (optional)', { span: 2 })}{f('city', 'Town or city')}
+            <label className="field">District
+              <select className="input" name="district" value={str('district')} onChange={(e) => patch({ district: e.target.value })}>
+                <option value="">Select district</option>
+                {SL_DISTRICTS.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </label>
+            {f('post', 'Postal code (optional)', { span: 2 })}
           </div>
           <ErrorText>{err}</ErrorText>{ok && <div className="ok">{ok}</div>}
           <div><button type="button" className="btn" onClick={saveAddr}>Save Address</button></div>
@@ -122,7 +145,7 @@ export function Account({ route }: { route: Route }) {
         <div className="card stack" style={{ maxWidth: 640, gap: 16 }}>
           <div className="h3">Your details</div>
           <div className="fields two">
-            {f('dname', 'Full name', { span: 2 })}{f('demail', 'Email', { type: 'email', span: 2 })}{f('newpw', 'New password (optional)', { type: 'password', span: 2 })}
+            {f('dname', 'Full name', { span: 2 })}{f('demail', remote ? 'Email (to change it, contact us)' : 'Email', { type: 'email', span: 2 })}{f('newpw', 'New password (optional)', { type: 'password', span: 2 })}
           </div>
           <ErrorText>{err}</ErrorText>{ok && <div className="ok">{ok}</div>}
           <div><button type="button" className="btn" onClick={saveDetails}>Save Details</button></div>

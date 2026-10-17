@@ -1,92 +1,130 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../AppContext';
 import { DiscountBox } from '../components/DiscountBox';
 import { Summary } from './Cart';
-import { Chip, ErrorText, Field, useForm } from '../components/ui';
-import { computeTotals, lineText } from '../commerce';
-import { get, isEmail, money, set, setLocal } from '../store';
+import { ErrorText, Field, useForm } from '../components/ui';
+import { computeTotals, lineText, type Totals } from '../commerce';
+import { SL_DISTRICTS, get, isEmail, money, set, setLocal } from '../store';
 import { remote } from '../remote';
-import { placeOrder } from '../sync';
+import { orderErrorText, placeOrder, quoteOrder } from '../sync';
 import { go } from '../router';
-import type { Order, Product, User } from '../types';
+import type { CartLine, Order, PayMethod, Product, User } from '../types';
 
-type ShipM = 'standard' | 'express';
+type ShipM = 'standard' | 'express' | 'pickup';
+
+const PAY_INFO: Record<PayMethod, { title: string; sub: string }> = {
+  bank: { title: 'Bank transfer', sub: 'Pay into our account, then upload your receipt or send it on WhatsApp. We approve it and start pouring.' },
+  store: { title: 'Pay at store pickup', sub: 'Pay when you collect your order.' },
+  whatsapp: { title: 'Arrange payment on WhatsApp', sub: 'We will message you to arrange payment.' },
+  card: { title: 'Card', sub: '' },
+};
 
 export function Checkout() {
-  const { cart, user, disc, discObj, settings: st, clearCart } = useApp();
+  const { cart, user, disc, discObj, settings: st, clearCart, flash } = useApp();
   const saved = useMemo(() => (user ? get<User[]>('users', []).find((u) => u.id === user.id)?.address ?? {} : {}), [user]);
-  const { bind, str } = useForm({ ...saved, email: user?.email ?? '' });
+  const { bind, str, set: patch } = useForm({ ...saved, email: user?.email ?? '' });
+  // fill the form from the saved address once it is available (it can arrive from the server after first render)
+  const savedKey = JSON.stringify(saved) + (user?.email ?? '');
+  useEffect(() => { patch({ ...saved, email: user?.email ?? '' }); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [savedKey]);
   const [step, setStep] = useState(1);
   const [err, setErr] = useState('');
   const [shipM, setShipM] = useState<ShipM>('standard');
   const [wrap, setWrap] = useState(false);
-  const [pay, setPay] = useState<'card' | 'paypal'>('card');
+  const [payMethod, setPayMethod] = useState<PayMethod>('bank');
+  const [busy, setBusy] = useState(false);
+  const [quote, setQuote] = useState<Order | null>(null);
 
-  const T = computeTotals(cart, discObj, st, shipM, wrap);
-  const stdFree = computeTotals(cart, discObj, st, 'standard').ship === 0;
-  const steps = ['1 Information', '2 Delivery', '3 Payment'];
+  const pickupOn = st.pickupAddress.trim() !== '';
+  const methods = (['bank', 'store', 'whatsapp'] as PayMethod[]).filter((m) => st.pay[m] && (m !== 'store' || shipM === 'pickup') && (m !== 'bank' || st.bank.number.trim() !== ''));
+  const pay: PayMethod = methods.includes(payMethod) ? payMethod : methods[0];
+  const district = str('district');
+
+  // online baskets must carry the customer's choices so the server can price them
+  const stale = remote && cart.some((l) => !l.box && !l.sel);
+  useEffect(() => {
+    if (!stale) return;
+    set('cart', get<CartLine[]>('cart', []).filter((l) => l.box || l.sel));
+    flash('Some older items were removed from your basket. Please add them again.');
+  }, [stale, flash]);
+
+  const local = computeTotals(cart, discObj, st, shipM, wrap, district);
+  const stdFree = computeTotals(cart, discObj, st, 'standard', false, district).ship === 0;
+  const T: Totals = quote ? { ...local, sub: quote.sub, disc: quote.disc, ship: quote.ship, wrap: quote.wrap, total: quote.total } : local;
+  const steps = ['1 Your details', '2 Delivery', '3 Payment'];
+
+  const payload = () => ({
+    email: str('email').trim(), name: (str('first') + ' ' + str('last')).trim(), first: str('first').trim(), phone: str('phone').trim(),
+    address: shipM === 'pickup' ? { a1: '', a2: '', city: '', district: '', post: '' } : { a1: str('a1').trim(), a2: str('a2').trim(), city: str('city').trim(), district: str('district'), post: str('post').trim() },
+    items: cart.map((l) => (l.box ? { pid: 0, qty: l.qty, box: l.box, boxId: l.boxId, note: l.note } : { pid: l.pid, qty: l.qty, sel: l.sel })),
+    code: disc, shipM, wrap, payMethod: pay, note: str('gnote').trim(), sellerNote: str('snote').trim(),
+  });
+
+  // the server's own totals for step 3 (and whenever the choices that affect price change)
+  useEffect(() => {
+    if (!remote || step !== 3 || stale) return;
+    let live = true;
+    setQuote(null);
+    quoteOrder(payload()).then((q) => { if (live) { setQuote(q); setErr(''); } }).catch((e) => { if (live) setErr(orderErrorText(e)); });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, shipM, wrap, pay, disc, cart, district]);
 
   const field = (name: string, label: string, o: { type?: string; ph?: string; span?: 1 | 2 } = {}) => <Field key={name} label={label} {...bind(name)} type={o.type} placeholder={o.ph} span={o.span} />;
-
-  const [busy, setBusy] = useState(false);
 
   const next = async () => {
     if (busy) return;
     if (step === 1) {
       if (!isEmail(str('email'))) return setErr('Enter a valid email address.');
-      for (const [k, n] of [['first', 'first name'], ['last', 'last name'], ['a1', 'address'], ['city', 'town or city'], ['post', 'postcode']] as const) {
-        if (!str(k).trim()) return setErr('Enter your ' + n + '.');
-      }
+      if (!str('first').trim() || !str('last').trim()) return setErr('Enter your first and last name.');
+      if (!/^[+\d][\d\s-]{8,}$/.test(str('phone').trim())) return setErr('Enter a phone number we can reach you on (we use it for delivery).');
       setErr(''); return setStep(2);
     }
-    if (step === 2) { setErr(''); return setStep(3); }
-
-    const digits = str('cardno').replace(/\s/g, '');
-    if (pay === 'card') {
-      if (!/^\d{16}$/.test(digits)) return setErr('Enter a 16 digit card number.');
-      if (!str('cardname').trim()) return setErr('Enter the name on the card.');
-      if (!/^\d{2}\/\d{2}$/.test(str('exp'))) return setErr('Enter expiry as MM/YY.');
-      if (!/^\d{3,4}$/.test(str('cvc'))) return setErr('Enter the security code.');
-    }
-
-    const orders = get<Order[]>('orders', []);
-    const nextNum = orders.reduce((m, o) => Math.max(m, Number(o.id.replace(/\D/g, '')) || 0), 1000) + 1;
-    const id = 'EE-' + nextNum, iso = new Date().toISOString();
-    const order: Order = {
-      id, date: iso, email: str('email'), name: str('first') + ' ' + str('last'), first: str('first'), phone: str('phone'),
-      address: { a1: str('a1'), a2: str('a2'), city: str('city'), post: str('post') },
-      items: cart.map((l) => ({ name: l.name, sub: l.sub, qty: l.qty, unit: l.unit, tint: l.tint, pid: l.pid, ...(l.note ? { note: l.note } : {}) })),
-      sub: T.sub, disc: T.disc, code: disc, ship: T.ship, shipM, wrap: T.wrap, total: T.total, status: 'Processing',
-      pay: pay === 'card' ? 'Card ending ' + digits.slice(-4) : 'PayPal', note: str('gnote'), sellerNote: str('snote').trim(), userId: user ? user.id : null, log: [{ s: 'Placed', d: iso }],
-    };
-    let finalId = id;
-    if (remote) {
-      setBusy(true);
-      try {
-        finalId = await placeOrder(order);
-      } catch {
-        setBusy(false);
-        return setErr('We could not place your order. Please check your connection and try again.');
+    if (step === 2) {
+      if (shipM !== 'pickup') {
+        for (const [k, n] of [['a1', 'address'], ['city', 'town or city'], ['district', 'district']] as const) if (!str(k).trim()) return setErr('Enter your ' + n + '.');
       }
-      setBusy(false);
-      setLocal('orders', orders.concat({ ...order, id: finalId }));
+      setErr(''); return setStep(3);
+    }
+    if (!pay) return setErr('No payment method is available right now. Please contact us.');
+
+    let order: Order;
+    setBusy(true);
+    if (remote) {
+      try {
+        order = await placeOrder(payload());
+      } catch (e) {
+        setBusy(false);
+        return setErr(orderErrorText(e));
+      }
+      setLocal('orders', get<Order[]>('orders', []).filter((o) => o.id !== order.id).concat(order));
     } else {
+      const orders = get<Order[]>('orders', []);
+      const nextNum = orders.reduce((m, o) => Math.max(m, Number(o.id.replace(/\D/g, '')) || 0), 1000) + 1;
+      const iso = new Date().toISOString(), p = payload();
+      order = {
+        id: 'EE-' + nextNum, date: iso, email: p.email, name: p.name, first: p.first, phone: p.phone, address: p.address,
+        items: cart.map((l) => ({ name: l.name, sub: l.sub, qty: l.qty, unit: l.unit, tint: l.tint, pid: l.pid, ...(l.note ? { note: l.note } : {}), ...(l.box ? { box: l.box.map((c) => ({ pid: c.pid, name: get<Product[]>('products', []).find((x) => x.id === c.pid)?.name ?? '' })) } : {}) })),
+        sub: T.sub, disc: T.disc, code: disc, ship: T.ship, shipM, wrap: T.wrap, total: T.total, status: 'Processing',
+        pay: PAY_INFO[pay].title, payMethod: pay, payStatus: 'Pending', note: p.note, sellerNote: p.sellerNote, userId: user ? user.id : null, log: [{ s: 'Placed', d: iso }],
+      };
       const products = get<Product[]>('products', []);
       cart.forEach((l) => {
-        if (!l.pid) return;
-        const p = products.find((x) => x.id === l.pid);
-        if (p && p.stock !== null) p.stock = Math.max(0, p.stock - l.qty);
+        (l.box ? l.box.map((c) => c.pid) : l.pid ? [l.pid] : []).forEach((id) => {
+          const pr = products.find((x) => x.id === id);
+          if (pr && pr.stock !== null) pr.stock = Math.max(0, pr.stock - l.qty);
+        });
       });
       set('products', products);
       set('orders', orders.concat(order));
     }
-    set('myorders', get<string[]>('myorders', []).concat(finalId));
+    setBusy(false);
+    set('myorders', get<string[]>('myorders', []).concat(order.id));
     clearCart();
-    go('order/' + finalId + '?new=1');
+    go('order/' + order.id + '?new=1');
   };
 
   const back = () => { setErr(''); setStep(Math.max(1, step - 1)); };
-  const addr = [str('first'), str('last')].filter(Boolean).join(' ') + ', ' + [str('a1'), str('city'), str('post')].filter(Boolean).join(', ');
+  const addr = [str('a1'), str('city'), district].filter(Boolean).join(', ');
 
   return (
     <section className="page">
@@ -99,30 +137,23 @@ export function Checkout() {
       ) : (
         <>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
-            {steps.map((l, i) => {
-              const done = step > i + 1, on = step === i + 1;
-              return (
-                <span key={l} aria-current={on ? 'step' : undefined} style={{ font: '500 14px Inter', padding: '8px 16px', borderRadius: 9999, border: `1px solid ${on || done ? 'var(--brown)' : 'var(--sand)'}`, background: on ? 'var(--brown)' : done ? 'var(--cream)' : '#fff', color: on ? '#fff' : 'var(--ink)' }}>{l}</span>
-              );
-            })}
+            {steps.map((s, i) => (
+              <span key={s} style={{ fontSize: 14, fontWeight: step === i + 1 ? 600 : 500, padding: '6px 12px', borderRadius: 9999, background: step === i + 1 ? 'var(--brown)' : 'var(--sand-l)', color: step === i + 1 ? '#fff' : 'var(--muted)' }}>{s}</span>
+            ))}
           </div>
           <div className="layout-main-side">
             <div className="stack" style={{ gap: 16, minWidth: 0 }}>
               {step === 1 && (
                 <div className="card stack" style={{ gap: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                    <div className="h3">Contact and delivery address</div>
+                    <div className="h3">Your details</div>
                     {!user && <a href="#/login?next=checkout" style={{ fontSize: 14, fontWeight: 500 }}>Have an account? Sign in</a>}
                   </div>
                   <div className="fields two">
                     {field('email', 'Email', { type: 'email', ph: 'you@example.com', span: 2 })}
                     {field('first', 'First name')}
                     {field('last', 'Last name')}
-                    {field('phone', 'Phone (optional)', { type: 'tel', span: 2 })}
-                    {field('a1', 'Address', { span: 2 })}
-                    {field('a2', 'Flat, suite (optional)', { span: 2 })}
-                    {field('city', 'Town or city')}
-                    {field('post', 'Postcode')}
+                    {field('phone', 'Phone / WhatsApp number', { type: 'tel', ph: '077 123 4567', span: 2 })}
                   </div>
                   <Field label="Note for the seller (optional)" {...bind('snote')} rows={3} placeholder="Colour matching, delivery instructions, anything we should know" />
                   <Field label="Gift message (optional)" {...bind('gnote')} rows={2} placeholder="Added to the packing slip" />
@@ -137,11 +168,25 @@ export function Checkout() {
               {step === 2 && (
                 <div className="card stack" style={{ gap: 16 }}>
                   <div className="h3">Delivery</div>
-                  <div style={{ fontSize: 14, color: 'var(--text2)' }}>Deliver to: {addr} <button type="button" className="link-btn" onClick={() => setStep(1)}>Edit</button></div>
-                  {([['standard', 'Standard', '3 to 5 working days', stdFree ? 'Free' : money(st.standard)], ['express', 'Express', 'Next working day', money(st.express)]] as const).map(([id, label, eta, price]) => (
+                  {([['standard', 'Standard delivery', '3 to 5 working days', stdFree ? 'Free' : money(computeTotals(cart, discObj, st, 'standard', false, district).ship)], ['express', 'Express delivery', 'Next working day (Colombo area and main cities)', money(st.express)], ...(pickupOn ? [['pickup', 'Store pickup', st.pickupAddress, 'Free']] : [])] as [ShipM, string, string, string][]).map(([id, label, eta, price]) => (
                     <OptionRow key={id} on={shipM === id} onClick={() => setShipM(id)} title={label} sub={eta} price={price} />
                   ))}
+                  {shipM !== 'pickup' && (
+                    <div className="fields two">
+                      {field('a1', 'Address', { span: 2 })}
+                      {field('a2', 'Apartment, landmark (optional)', { span: 2 })}
+                      {field('city', 'Town or city')}
+                      <label className="field">District
+                        <select className="input" name="district" value={district} onChange={(e) => patch({ district: e.target.value })}>
+                          <option value="">Select district</option>
+                          {SL_DISTRICTS.map((d) => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </label>
+                      {field('post', 'Postal code (optional)')}
+                    </div>
+                  )}
                   <OptionRow on={wrap} onClick={() => setWrap(!wrap)} title="Gift wrap" sub="Kraft box, ribbon and message card" price={money(st.giftWrap)} />
+                  <ErrorText>{err}</ErrorText>
                   <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between', flexWrap: 'wrap' }}>
                     <button type="button" className="btn ghost" onClick={back}>Back</button>
                     <button type="button" className="btn" onClick={next}>Continue to Payment</button>
@@ -152,25 +197,23 @@ export function Checkout() {
               {step === 3 && (
                 <div className="card stack" style={{ gap: 16 }}>
                   <div className="h3">Payment</div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <Chip size="wide" on={pay === 'card'} onClick={() => { setPay('card'); setErr(''); }}>Card</Chip>
-                    <Chip size="wide" on={pay === 'paypal'} onClick={() => { setPay('paypal'); setErr(''); }}>PayPal</Chip>
+                  <div style={{ fontSize: 14, color: 'var(--text2)' }}>
+                    {shipM === 'pickup' ? <>Collect from: {st.pickupAddress}</> : <>Deliver to: {addr}</>} <button type="button" className="link-btn" onClick={() => setStep(2)}>Edit</button>
                   </div>
-                  {pay === 'card' ? (
-                    <div className="fields two">
-                      {field('cardno', 'Card number', { ph: '1234 5678 9012 3456', span: 2 })}
-                      {field('cardname', 'Name on card', { span: 2 })}
-                      {field('exp', 'Expiry', { ph: 'MM/YY' })}
-                      {field('cvc', 'Security code', { ph: '123' })}
+                  {methods.map((m) => <OptionRow key={m} on={pay === m} onClick={() => setPayMethod(m)} title={PAY_INFO[m].title} sub={PAY_INFO[m].sub} price="" />)}
+                  {pay === 'bank' && (
+                    <div className="bank-box">
+                      <b>Our bank details</b>
+                      <div>{st.bank.bank}{st.bank.branch ? ' · ' + st.bank.branch : ''}</div>
+                      <div>{st.bank.name}</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: 0.5 }}>{st.bank.number}</div>
+                      <div className="muted" style={{ fontSize: 13 }}>You will get your order number on the next page. Use it as the payment reference.</div>
                     </div>
-                  ) : (
-                    <div style={{ fontSize: 14, color: 'var(--text2)' }}>You will be sent to PayPal to approve the payment (demo, no redirect).</div>
                   )}
-                  <div style={{ fontSize: 12, color: 'var(--muted2)' }}>Demo store: no payment is taken. Enter any 16 digits.</div>
                   <ErrorText>{err}</ErrorText>
                   <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between', flexWrap: 'wrap' }}>
                     <button type="button" className="btn ghost" onClick={back}>Back</button>
-                    <button type="button" className="btn" onClick={next}>Place Order · {money(T.total)}</button>
+                    <button type="button" className="btn" onClick={next} disabled={busy || (remote && !quote && !err)}>{busy ? 'Placing order…' : 'Place Order · ' + money(T.total)}</button>
                   </div>
                 </div>
               )}
@@ -189,7 +232,8 @@ export function Checkout() {
                 </div>
               ))}
               <DiscountBox />
-              <Summary shipLabel="Delivery" totals={T} />
+              <Summary shipLabel={shipM === 'pickup' ? 'Store pickup' : 'Delivery'} totals={T} />
+              {remote && step === 3 && quote && <div className="muted" style={{ fontSize: 12 }}>Prices confirmed by our server.</div>}
             </aside>
           </div>
         </>
