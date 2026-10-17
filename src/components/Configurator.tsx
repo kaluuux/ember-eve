@@ -1,6 +1,6 @@
 import { useApp } from '../AppContext';
 import { Chip } from './ui';
-import { CUSTOM, allowedColors, blendFee, normalize, type Selection } from '../commerce';
+import { CUSTOM, STICKER_MAX, allowedColors, blendFee, normalize, type Selection } from '../commerce';
 import { money } from '../store';
 import type { Product } from '../types';
 
@@ -75,6 +75,21 @@ export function Configurator({ p, sel, onChange, size = 'lg' }: { p: Product; se
               <div style={{ fontSize: 13, marginTop: 8, color: sel.blend.length < 2 ? 'var(--red)' : 'var(--text2)' }}>
                 {sel.blend.length < 2 ? 'Choose at least 2 colours.' : sel.blend.map((id) => colors.find((c) => c.id === id)?.name).join(' + ') + (fee ? ` · colour fee ${money(fee)}` : ' · no colour fee')}
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {p.sticker && (
+        <div>
+          <label style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
+            <input type="checkbox" checked={sel.sticker !== undefined} onChange={(e) => upd({ sticker: e.target.checked ? '' : undefined })} style={{ width: 18, height: 18, accentColor: '#8F6642' }} />
+            Add a custom message or quote on the sticker <span style={{ color: 'var(--green)', fontWeight: 600 }}>(free)</span>
+          </label>
+          {sel.sticker !== undefined && (
+            <div style={{ marginTop: 8 }}>
+              <input className="input" maxLength={STICKER_MAX} value={sel.sticker} onChange={(e) => upd({ sticker: e.target.value })} placeholder="e.g. Happy Birthday Amma" aria-label="Sticker message" />
+              <div className="muted" style={{ fontSize: 12, textAlign: 'right', marginTop: 2 }}>{sel.sticker.length}/{STICKER_MAX}</div>
             </div>
           )}
         </div>

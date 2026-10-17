@@ -33,7 +33,8 @@ export function ratingOf(reviews: { pid: number; stars: number }[], pid: number)
 
 /* ------------------------------------------------------------ options and pricing */
 export const CUSTOM = 'custom';
-export interface Selection { opts: Record<string, string>; color: string; blend: string[]; qty: number }
+export const STICKER_MAX = 60;
+export interface Selection { opts: Record<string, string>; color: string; blend: string[]; qty: number; /** undefined = no sticker message; '' = ticked but not typed yet */ sticker?: string }
 
 /** Colours available for the current option picks (an option can restrict the palette, e.g. brown jar: white only). */
 export function allowedColors(p: Product, opts: Record<string, string>, palette: Color[]): Color[] {
@@ -59,7 +60,8 @@ export function normalize(p: Product, sel: Partial<Selection>, palette: Color[])
   if (!p.colors) color = '';
   else if (color === CUSTOM ? !canBlend : !allowed.some((c) => c.id === color)) color = allowed[0]?.id ?? '';
   const blend = (sel.blend ?? []).filter((id) => allowed.some((c) => c.id === id));
-  return { opts, color, blend, qty: Math.max(1, sel.qty ?? 1) };
+  const sticker = p.sticker && sel.sticker !== undefined ? sel.sticker.slice(0, STICKER_MAX) : undefined;
+  return { opts, color, blend, qty: Math.max(1, sel.qty ?? 1), sticker };
 }
 
 export const defaultSelection = (p: Product, palette: Color[]): Selection => normalize(p, {}, palette);
@@ -82,6 +84,7 @@ export function describe(p: Product, sel: Selection, palette: Color[]): string {
       ? 'Custom blend (' + sel.blend.map((id) => palette.find((c) => c.id === id)?.name ?? id).join(' + ') + ')'
       : palette.find((c) => c.id === sel.color)?.name ?? ''));
   }
+  if (p.sticker && sel.sticker?.trim()) parts.push('Sticker: "' + sel.sticker.trim() + '"');
   return parts.join(' · ');
 }
 

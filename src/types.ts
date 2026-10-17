@@ -20,6 +20,8 @@ export interface Product {
   colors: boolean;
   /** Offers a custom blend of 2+ palette colours */
   custom: boolean;
+  /** Offers a free custom message or quote on the sticker (jar and glass candles) */
+  sticker?: boolean;
   /** null = made to order (no stock limit) */
   stock: number | null;
   /** Percentage off, 0 = not on sale */

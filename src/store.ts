@@ -120,7 +120,7 @@ export function starterCatalog() {
   const ago = (d: number) => new Date(now - d * day).toISOString();
   const mk = (id: number, name: string, cat: string, base: number, blurb: string, o: Partial<Product> = {}): Product => ({
     id, name, cat, blurb, desc: blurb + ' Hand-poured in small batches from high quality, non-toxic soy wax, with a cotton wick and careful finishing.',
-    base, groups: [], colors: true, custom: true, stock: null, salePct: 0, pins: [], season: '', active: true, featured: false,
+    base, groups: [], colors: true, custom: true, sticker: cat === 'jar' || cat === 'glass', stock: null, salePct: 0, pins: [], season: '', active: true, featured: false,
     created: ago(90), ...o,
   });
   const products: Product[] = [];
@@ -171,7 +171,7 @@ export function starterCatalog() {
 }
 
 function seed() {
-  if (remote || get('seeded_v4', false)) return;
+  if (remote || get('seeded_v5', false)) return;
   const day = 86400000, now = Date.now();
   const ago = (d: number) => new Date(now - d * day).toISOString();
   const { products } = starterCatalog();

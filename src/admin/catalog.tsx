@@ -27,7 +27,7 @@ export function ProductsView({ flash }: { flash: Flash }) {
   const rows = products.filter((p) => (!cat || p.cat === cat) && (!q || p.name.toLowerCase().includes(q.toLowerCase())));
   const patch = (id: number, o: Partial<Product>) => set('products', get<Product[]>('products', []).map((x) => (x.id === id ? { ...x, ...o } : x)));
   const blank = (): Product => ({
-    id: 0, name: '', cat: categories[0]?.id ?? '', blurb: '', desc: '', base: 0, groups: [], colors: true, custom: true, stock: null,
+    id: 0, name: '', cat: categories[0]?.id ?? '', blurb: '', desc: '', base: 0, groups: [], colors: true, custom: true, sticker: false, stock: null,
     salePct: 0, pins: [], season: '', active: true, featured: false, created: new Date().toISOString(),
   });
   const duplicate = (p: Product) => {
@@ -183,6 +183,7 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Chip size="lg" on={d.colors} onClick={() => up({ colors: !d.colors })}>Offer colours</Chip>
           <Chip size="lg" on={d.colors && d.custom} onClick={() => up({ custom: !d.custom, colors: true })}>Allow custom colour blend</Chip>
+          <Chip size="lg" on={!!d.sticker} onClick={() => up({ sticker: !d.sticker })}>Offer sticker message (free)</Chip>
           <Chip size="lg" on={d.active} onClick={() => up({ active: !d.active })}>Visible in store</Chip>
           <Chip size="lg" on={d.featured} onClick={() => up({ featured: !d.featured })}>Featured</Chip>
         </div>

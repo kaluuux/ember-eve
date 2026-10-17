@@ -111,7 +111,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const st = get<Settings>('settings', DEFAULT_SETTINGS);
     const sel = normalize(p, raw, palette);
     if (!blendValid(sel)) { flash('Pick at least 2 colours for a custom blend'); return false; }
-    const key = [pid, JSON.stringify(sel.opts), sel.color, sel.blend.join('+')].join('|');
+    const key = [pid, JSON.stringify(sel.opts), sel.color, sel.blend.join('+'), sel.sticker?.trim() ?? ''].join('|');
     const cur = get<CartLine[]>('cart', []).slice();
     const i = cur.findIndex((x) => x.key === key);
     const have = cur.filter((x) => x.pid === pid).reduce((a, x) => a + x.qty, 0);
