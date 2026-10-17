@@ -4,6 +4,8 @@ import { Chip, ErrorText, Stepper } from '../components/ui';
 import { ProductCard } from '../components/ProductCard';
 import { Configurator } from '../components/Configurator';
 import { get, money, set } from '../store';
+import { remote } from '../remote';
+import { submitReview as submitReviewRemote } from '../sync';
 import { blendValid, defaultSelection, fromListPrice, inStock, listPrice, normalize, ratingOf, selectionTint, unitPrice, type Selection } from '../commerce';
 import type { Route } from '../router';
 import type { Review } from '../types';
@@ -56,9 +58,14 @@ export function Product({ route }: { route: Route }) {
   ][tab];
   const stockText = sold ? 'Sold out' : pp.stock === null ? 'Made to order' : available <= 0 ? 'All available stock is in your basket' : pp.stock <= 5 ? 'Only ' + pp.stock + ' left' : 'In stock';
 
-  const submitReview = () => {
+  const submitReview = async () => {
     if (!rvq.trim() || !user) return setErr('Write a few words first.');
-    set<Review[]>('reviews', get<Review[]>('reviews', []).concat({ id: Date.now(), pid: pp.id, who: user.name, stars: rvStars, q: rvq.trim(), date: new Date().toISOString().slice(0, 10), approved: false }));
+    const rv = { pid: pp.id, who: user.name, stars: rvStars, q: rvq.trim(), date: new Date().toISOString().slice(0, 10) };
+    if (remote) {
+      try { await submitReviewRemote(rv); } catch { return setErr('Could not send your review. Please try again.'); }
+    } else {
+      set<Review[]>('reviews', get<Review[]>('reviews', []).concat({ id: Date.now(), ...rv, approved: false }));
+    }
     setRvq(''); setErr(''); setOk('Thank you. Your review will appear once approved.');
   };
 

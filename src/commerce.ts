@@ -119,24 +119,32 @@ export const SHELVES: { id: Shelf; title: string; blurb: string }[] = [
 ];
 const DAY = 86400000;
 
-function unitsSold(orders: Order[], since: number): Record<number, number> {
-  const u: Record<number, number> = {};
+/** Units sold per product: all time and the last 30 days. Built from orders (offline demo) or the server's sales summary. */
+export type Sales = Record<number, { all: number; recent: number }>;
+export function salesFromOrders(orders: Order[], now = Date.now()): Sales {
+  const u: Sales = {};
   orders.forEach((o) => {
-    if (o.status === 'Cancelled' || new Date(o.date).getTime() < since) return;
-    o.items.forEach((i) => { if (i.pid) u[i.pid] = (u[i.pid] || 0) + i.qty; });
+    if (o.status === 'Cancelled') return;
+    const recent = now - new Date(o.date).getTime() <= 30 * DAY;
+    o.items.forEach((i) => {
+      if (!i.pid) return;
+      const e = (u[i.pid] ??= { all: 0, recent: 0 });
+      e.all += i.qty;
+      if (recent) e.recent += i.qty;
+    });
   });
   return u;
 }
 
-export function shelfProducts(kind: Shelf, visible: Product[], orders: Order[], now = Date.now()): Product[] {
+export function shelfProducts(kind: Shelf, visible: Product[], sales: Sales, now = Date.now()): Product[] {
   if (kind === 'sale') return visible.filter((p) => p.salePct > 0).sort((a, b) => b.salePct - a.salePct);
   if (kind === 'new') {
     return visible.filter((p) => p.pins.includes('new') || now - new Date(p.created).getTime() <= 30 * DAY)
       .sort((a, b) => new Date(b.created).getTime() - new Date(a.created).getTime());
   }
-  const units = unitsSold(orders, kind === 'best' ? 0 : now - 30 * DAY);
+  const units = (id: number) => (kind === 'best' ? sales[id]?.all : sales[id]?.recent) ?? 0;
   const pinned = visible.filter((p) => p.pins.includes(kind));
-  const ranked = visible.filter((p) => !p.pins.includes(kind) && units[p.id] > 0).sort((a, b) => units[b.id] - units[a.id]);
+  const ranked = visible.filter((p) => !p.pins.includes(kind) && units(p.id) > 0).sort((a, b) => units(b.id) - units(a.id));
   return pinned.concat(ranked);
 }
 

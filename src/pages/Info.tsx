@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { useApp } from '../AppContext';
 import { ErrorText, Field, Ph, useForm } from '../components/ui';
 import { WhatsInside } from './Home';
-import { get, isEmail, money, set } from '../store';
+import { get, isEmail, money, set, setLocal } from '../store';
+import { remote } from '../remote';
+import { fetchOrder, sendMessage } from '../sync';
 import { go } from '../router';
 import type { Message, Order } from '../types';
 
@@ -48,9 +50,14 @@ export function Contact() {
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
 
-  const submit = () => {
+  const submit = async () => {
     if (!str('cname').trim() || !isEmail(str('cemail')) || !str('cmsg').trim()) { setOk(''); return setErr('Please complete all fields with a valid email.'); }
-    set<Message[]>('messages', get<Message[]>('messages', []).concat({ id: Date.now(), name: str('cname'), email: str('cemail'), text: str('cmsg'), date: new Date().toISOString(), read: false }));
+    const msg = { name: str('cname'), email: str('cemail'), text: str('cmsg'), date: new Date().toISOString() };
+    if (remote) {
+      try { await sendMessage(msg); } catch { setOk(''); return setErr('Could not send your message. Please try again.'); }
+    } else {
+      set<Message[]>('messages', get<Message[]>('messages', []).concat({ id: Date.now(), ...msg, read: false }));
+    }
     setF({}); setErr(''); setOk('Thank you. We will reply within 2 working days.');
   };
 
@@ -156,8 +163,12 @@ export function Track() {
   const { bind, str } = useForm();
   const [err, setErr] = useState('');
 
-  const submit = () => {
-    const o = get<Order[]>('orders', []).find((x) => x.id.toLowerCase() === str('tkid').trim().toLowerCase() && x.email.toLowerCase() === str('tkemail').trim().toLowerCase());
+  const submit = async () => {
+    let o = get<Order[]>('orders', []).find((x) => x.id.toLowerCase() === str('tkid').trim().toLowerCase() && x.email.toLowerCase() === str('tkemail').trim().toLowerCase());
+    if (!o && remote) {
+      o = (await fetchOrder(str('tkid'), str('tkemail'))) ?? undefined;
+      if (o) setLocal('orders', get<Order[]>('orders', []).filter((x) => x.id !== o!.id).concat(o));
+    }
     if (!o) return setErr('We could not find that order. Check the number and email.');
     const mine = get<string[]>('myorders', []);
     if (!mine.includes(o.id)) set('myorders', mine.concat(o.id));

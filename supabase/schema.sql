@@ -113,6 +113,19 @@ drop policy if exists "messages admin" on messages;
 create policy "anyone can send a message" on messages for insert with check (is_read = false);
 create policy "messages admin" on messages for all using (is_admin()) with check (is_admin());
 
+-- ------------------------------------------------------------ v2 additions
+alter table admins enable row level security;   -- no policies: nobody can read it directly
+grant execute on function is_admin() to anon, authenticated;
+
+-- Customers validate a discount code without being able to list all codes.
+create or replace function check_discount(c text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select d from catalog_kv k, jsonb_array_elements(k.value) d
+  where k.key = 'discounts' and (d ->> 'active')::boolean and upper(d ->> 'code') = upper(trim(c))
+  limit 1;
+$$;
+grant execute on function check_discount(text) to anon, authenticated;
+
 -- ------------------------------------------------------ after running this file
 -- 1. Authentication > Users > Add user: create the admin login (email + password).
 -- 2. Run:  insert into admins (email) values ('your-admin@email.com');

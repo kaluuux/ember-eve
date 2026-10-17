@@ -86,7 +86,7 @@ export function Home() {
         <ShelfSection key={se.id} title={se.name} blurb={se.blurb} href={'shop?season=' + se.id} items={active.filter((p) => p.season === se.id)} tinted />
       ))}
 
-      <section className="page">
+      {categories.length > 0 && <section className="page">
         <h2 className="h2" style={{ marginBottom: 24 }}>Shop by Type</h2>
         <div className="cat-tiles">
           {categories.map((c, i) => {
@@ -103,7 +103,7 @@ export function Home() {
             );
           })}
         </div>
-      </section>
+      </section>}
 
       {SHELVES.map((sh) => <ShelfSection key={sh.id} title={sh.title} blurb={sh.blurb} href={'shop?shelf=' + sh.id} items={shelf(sh.id)} />)}
 

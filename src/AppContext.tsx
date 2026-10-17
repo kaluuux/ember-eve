@@ -1,8 +1,11 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { CartLine, Category, Color, Discount, Order, Product, Review, Season, Session, Settings, User } from './types';
 import { DEFAULT_SETTINGS, EMPTY, get, set, useStored } from './store';
-import { computeTotals, describe, normalize, selectionTint, shelfProducts, unitPrice, visibleProducts, blendValid, type Selection, type Shelf, type Totals } from './commerce';
+import { computeTotals, describe, normalize, selectionTint, salesFromOrders, shelfProducts, unitPrice, visibleProducts, blendValid, type Selection, type Shelf, type Totals } from './commerce';
 import { go } from './router';
+import { remote } from './remote';
+import { checkDiscount } from './sync';
+import type { Sales } from './commerce';
 
 export interface QuickView { id: number; sel: Selection }
 
@@ -22,6 +25,8 @@ interface Ctx {
   user: Session | null;
   disc: string;
   setDisc: (code: string) => void;
+  /** Validate and apply a code (server-checked when online). Resolves to an error message or ''. */
+  applyCode: (code: string) => Promise<string>;
   discObj: Discount | undefined;
   totals: Totals;
   toast: string;
@@ -49,6 +54,7 @@ export const useApp = () => {
 };
 
 const NO_SESSION: Session | null = null;
+const NO_SALES: Sales = {};
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const products = useStored<Product[]>('products', EMPTY);
@@ -56,6 +62,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const categories = useStored<Category[]>('categories', EMPTY);
   const seasons = useStored<Season[]>('seasons', EMPTY);
   const orders = useStored<Order[]>('orders', EMPTY);
+  const salesStored = useStored<Sales>('sales', NO_SALES);
   const settings = useStored<Settings>('settings', DEFAULT_SETTINGS);
   const reviewsAll = useStored<Review[]>('reviews', EMPTY);
   const discounts = useStored<Discount[]>('discounts', EMPTY);
@@ -64,7 +71,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const user = useStored<Session | null>('session', NO_SESSION);
   const cookieAccepted = useStored<boolean>('cookie', false);
 
-  const [disc, setDisc] = useState('');
+  const [disc, setDiscCode] = useState('');
+  const [remoteDisc, setRemoteDisc] = useState<Discount | undefined>();
+  const setDisc = useCallback((c: string) => { setDiscCode(c); if (!c) setRemoteDisc(undefined); }, []);
   const [toast, setToast] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
   const [qv, setQv] = useState<QuickView | null>(null);
@@ -78,9 +87,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const active = useMemo(() => visibleProducts(products, seasons), [products, seasons]);
   const liveSeasons = useMemo(() => seasons.filter((x) => active.some((p) => p.season === x.id)), [seasons, active]);
-  const shelf = useCallback((kind: Shelf) => shelfProducts(kind, active, orders), [active, orders]);
+  const sales = useMemo(() => (remote ? salesStored : salesFromOrders(orders)), [salesStored, orders]);
+  const shelf = useCallback((kind: Shelf) => shelfProducts(kind, active, sales), [active, sales]);
   const reviews = useMemo(() => reviewsAll.filter((r) => r.approved), [reviewsAll]);
-  const discObj = useMemo(() => discounts.find((d) => d.active && d.code === disc), [discounts, disc]);
+  const discObj = useMemo(() => (remote ? remoteDisc : discounts.find((d) => d.active && d.code === disc)), [discounts, disc, remoteDisc]);
   const totals = useMemo(() => computeTotals(cart, discObj, settings), [cart, discObj, settings]);
 
   const addLine = useCallback((line: CartLine) => {
@@ -126,7 +136,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     set('cart', cur);
   }, [flash]);
 
-  const clearCart = useCallback(() => { set('cart', []); setDisc(''); }, []);
+  const clearCart = useCallback(() => { set('cart', []); setDisc(''); }, [setDisc]);
+
+  const applyCode = useCallback(async (raw: string) => {
+    const c = raw.trim().toUpperCase();
+    const d = remote ? (await checkDiscount(c)) ?? undefined : get<Discount[]>('discounts', []).find((x) => x.active && x.code === c);
+    if (!d) return 'Code not recognised.';
+    const sub = get<CartLine[]>('cart', []).reduce((a, l) => a + l.unit * l.qty, 0);
+    if (sub < (d.min || 0)) return 'Spend Rs ' + d.min.toLocaleString('en-LK') + ' or more to use this code.';
+    setRemoteDisc(d); setDiscCode(d.code);
+    return '';
+  }, []);
 
   const toggleWish = useCallback((id: number) => {
     const w = get<number[]>('wish', []);
@@ -138,7 +158,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const acceptCookie = useCallback(() => set('cookie', true), []);
 
   const value: Ctx = {
-    products, active, colors, categories, seasons, liveSeasons, shelf, settings, reviews, cart, wish, user, disc, setDisc, discObj, totals, toast, flash, cartOpen, setCartOpen,
+    products, active, colors, categories, seasons, liveSeasons, shelf, settings, reviews, cart, wish, user, disc, setDisc, applyCode, discObj, totals, toast, flash, cartOpen, setCartOpen,
     qv, setQv, addCandle, addLine, setQty, clearCart, toggleWish, signIn, signOut, cookieAccepted, acceptCookie,
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;

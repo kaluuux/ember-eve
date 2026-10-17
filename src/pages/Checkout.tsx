@@ -4,7 +4,9 @@ import { DiscountBox } from '../components/DiscountBox';
 import { Summary } from './Cart';
 import { Chip, ErrorText, Field, useForm } from '../components/ui';
 import { computeTotals } from '../commerce';
-import { get, isEmail, money, set } from '../store';
+import { get, isEmail, money, set, setLocal } from '../store';
+import { remote } from '../remote';
+import { placeOrder } from '../sync';
 import { go } from '../router';
 import type { Order, Product, User } from '../types';
 
@@ -26,7 +28,10 @@ export function Checkout() {
 
   const field = (name: string, label: string, o: { type?: string; ph?: string; span?: 1 | 2 } = {}) => <Field key={name} label={label} {...bind(name)} type={o.type} placeholder={o.ph} span={o.span} />;
 
-  const next = () => {
+  const [busy, setBusy] = useState(false);
+
+  const next = async () => {
+    if (busy) return;
     if (step === 1) {
       if (!isEmail(str('email'))) return setErr('Enter a valid email address.');
       for (const [k, n] of [['first', 'first name'], ['last', 'last name'], ['a1', 'address'], ['city', 'town or city'], ['post', 'postcode']] as const) {
@@ -54,17 +59,30 @@ export function Checkout() {
       sub: T.sub, disc: T.disc, code: disc, ship: T.ship, shipM, wrap: T.wrap, total: T.total, status: 'Processing',
       pay: pay === 'card' ? 'Card ending ' + digits.slice(-4) : 'PayPal', note: str('gnote'), userId: user ? user.id : null, log: [{ s: 'Placed', d: iso }],
     };
-    const products = get<Product[]>('products', []);
-    cart.forEach((l) => {
-      if (!l.pid) return;
-      const p = products.find((x) => x.id === l.pid);
-      if (p && p.stock !== null) p.stock = Math.max(0, p.stock - l.qty);
-    });
-    set('products', products);
-    set('orders', orders.concat(order));
-    set('myorders', get<string[]>('myorders', []).concat(id));
+    let finalId = id;
+    if (remote) {
+      setBusy(true);
+      try {
+        finalId = await placeOrder(order);
+      } catch {
+        setBusy(false);
+        return setErr('We could not place your order. Please check your connection and try again.');
+      }
+      setBusy(false);
+      setLocal('orders', orders.concat({ ...order, id: finalId }));
+    } else {
+      const products = get<Product[]>('products', []);
+      cart.forEach((l) => {
+        if (!l.pid) return;
+        const p = products.find((x) => x.id === l.pid);
+        if (p && p.stock !== null) p.stock = Math.max(0, p.stock - l.qty);
+      });
+      set('products', products);
+      set('orders', orders.concat(order));
+    }
+    set('myorders', get<string[]>('myorders', []).concat(finalId));
     clearCart();
-    go('order/' + id + '?new=1');
+    go('order/' + finalId + '?new=1');
   };
 
   const back = () => { setErr(''); setStep(Math.max(1, step - 1)); };

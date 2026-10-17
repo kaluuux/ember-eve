@@ -1,4 +1,5 @@
 import { useMemo, useSyncExternalStore } from 'react';
+import { remote } from './remote';
 import type { Category, Color, Discount, Group, Order, OrderStatus, Product, Review, Season, Settings, User } from './types';
 
 /**
@@ -17,13 +18,30 @@ export function get<T>(k: string, d: T): T {
   }
 }
 
-export function set<T>(k: string, v: T): T {
+/** Write to this browser's cache only (used when loading data from the server). */
+export function setLocal<T>(k: string, v: T): T {
   try {
     localStorage.setItem(P + k, JSON.stringify(v));
   } catch {
     /* storage unavailable: keep running without persistence */
   }
   window.dispatchEvent(new Event(EVT));
+  return v;
+}
+
+export function clearLocal(k: string) {
+  try { localStorage.removeItem(P + k); } catch { /* ignore */ }
+  window.dispatchEvent(new Event(EVT));
+}
+
+type Push = (k: string, v: unknown) => void;
+let push: Push | null = null;
+/** The sync layer registers itself here so admin edits are written through to the server. */
+export function registerPush(fn: Push) { push = fn; }
+
+export function set<T>(k: string, v: T): T {
+  setLocal(k, v);
+  push?.(k, v);
   return v;
 }
 
@@ -95,8 +113,8 @@ const FRAG: Group = {
 };
 const GLASS_SIZE: Group = { id: 'size', label: 'Size', options: [{ id: 's', label: 'Small (150g)', add: 0 }, { id: 'l', label: 'Large (300g)', add: 600 }] };
 
-function seed() {
-  if (get('seeded_v2', false)) return;
+/** The starter catalogue: used by the offline demo and by the admin "Publish starter catalogue" button. */
+export function starterCatalog() {
   const day = 86400000, now = Date.now();
   const ago = (d: number) => new Date(now - d * day).toISOString();
   const mk = (id: number, name: string, cat: string, base: number, blurb: string, o: Partial<Product> = {}): Product => ({
@@ -134,15 +152,30 @@ function seed() {
   seasonal.forEach(([season, n, cat, base, blurb]) => products.push(mk(id++, n, cat, base, blurb, {
     season, groups: cat === 'glass' ? [GLASS_SIZE, FRAG] : cat === 'jar' ? [FRAG] : [], created: ago(season === 'halloween' ? 5 : 40),
   })));
+  return {
+    products,
+    colors: DEFAULT_COLORS,
+    categories: DEFAULT_CATEGORIES,
+    seasons: DEFAULT_SEASONS,
+    settings: DEFAULT_SETTINGS,
+    discounts: [
+      { code: 'WELCOME10', type: 'pct', value: 10, min: 0, active: true, note: '10% off your order' },
+      { code: 'EVE500', type: 'fixed', value: 500, min: 3000, active: true, note: 'Rs 500 off orders over Rs 3,000' },
+      { code: 'FREESHIP', type: 'ship', value: 0, min: 0, active: true, note: 'Free standard delivery' },
+    ] as Discount[],
+  };
+}
+
+function seed() {
+  if (remote || get('seeded_v2', false)) return;
+  const day = 86400000, now = Date.now();
+  const ago = (d: number) => new Date(now - d * day).toISOString();
+  const { products } = starterCatalog();
   set<Product[]>('products', products);
   set<Color[]>('colors', DEFAULT_COLORS);
   set<Category[]>('categories', DEFAULT_CATEGORIES);
   set<Season[]>('seasons', DEFAULT_SEASONS);
-  set<Discount[]>('discounts', [
-    { code: 'WELCOME10', type: 'pct', value: 10, min: 0, active: true, note: '10% off your order' },
-    { code: 'EVE500', type: 'fixed', value: 500, min: 3000, active: true, note: 'Rs 500 off orders over Rs 3,000' },
-    { code: 'FREESHIP', type: 'ship', value: 0, min: 0, active: true, note: 'Free standard delivery' },
-  ]);
+  set<Discount[]>('discounts', starterCatalog().discounts);
   set<Settings>('settings', DEFAULT_SETTINGS);
   set('cart', []); set('wish', []);
   if (!get<User[]>('users', []).length) {

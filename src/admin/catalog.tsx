@@ -2,6 +2,8 @@ import { useState, type ReactNode } from 'react';
 import { EMPTY, get, money, set, useStored } from '../store';
 import { Chip, ErrorText } from '../components/ui';
 import { seasonLive } from '../commerce';
+import { remote } from '../remote';
+import { publishStarter } from '../sync';
 import type { Category, Color, Group, Opt, Pin, Product, Season } from '../types';
 
 type Flash = (m: string) => void;
@@ -234,6 +236,13 @@ export function CatalogView({ flash }: { flash: Flash }) {
   return (
     <>
       <H1>Catalogue setup</H1>
+      {remote && products.length === 0 && (
+        <div className="card" style={{ margin: '16px 0', background: 'var(--cream)' }}>
+          <div className="h3">Your online catalogue is empty</div>
+          <p className="muted" style={{ margin: '4px 0 12px' }}>Publish the starter catalogue (types, 15 colours, seasons and sample candles) so customers see a shop, then edit it from the Products page.</p>
+          <button type="button" className="btn" onClick={async () => { const e = await publishStarter(); flash(e ? 'Failed: ' + e : 'Starter catalogue published'); }}>Publish starter catalogue</button>
+        </div>
+      )}
       <p className="muted" style={{ margin: '4px 0 24px' }}>Types, the colour palette and seasonal collections. Changes appear on the storefront straight away.</p>
       <div className="stack" style={{ gap: 24, maxWidth: 820 }}>
         <div className="card stack" style={{ gap: 12 }}>

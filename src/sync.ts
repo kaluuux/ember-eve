@@ -1,0 +1,210 @@
+import { useSyncExternalStore } from 'react';
+import { sb, remote } from './remote';
+import { clearLocal, registerPush, setLocal, starterCatalog } from './store';
+import type { Discount, Message, Order, Product, Review } from './types';
+
+/**
+ * Server sync (Supabase). Public data is loaded for everyone; admin edits are written through.
+ * When Supabase is not configured every function here is a no-op and the app runs on localStorage.
+ */
+
+export type Sales = Record<number, { all: number; recent: number }>;
+const CATALOG_KEYS = ['products', 'colors', 'categories', 'seasons', 'settings'] as const;
+
+/* ------------------------------------------------------------------ admin session */
+let admin = false;
+const ADM = 'ee-admin-state';
+const subAdmin = (cb: () => void) => { window.addEventListener(ADM, cb); return () => window.removeEventListener(ADM, cb); };
+export const useIsAdmin = () => useSyncExternalStore(subAdmin, () => admin);
+
+export async function refreshAdmin(): Promise<void> {
+  if (!sb) return;
+  const { data } = await sb.auth.getSession();
+  let ok = false;
+  if (data.session) ok = (await sb.rpc('is_admin')).data === true;
+  const changed = ok !== admin;
+  admin = ok;
+  if (changed) window.dispatchEvent(new Event(ADM));
+  if (ok) await hydrate();
+}
+
+export async function adminSignIn(email: string, password: string): Promise<string> {
+  if (!sb) return 'Server is not configured.';
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) return 'Email or password is incorrect.';
+  await refreshAdmin();
+  return admin ? '' : 'This account is not an admin.';
+}
+export async function adminSignOut() {
+  await sb?.auth.signOut();
+  admin = false;
+  window.dispatchEvent(new Event(ADM));
+}
+
+/* ------------------------------------------------------------------------ errors */
+function fail(msg: string) { window.dispatchEvent(new CustomEvent('ee-sync-error', { detail: msg })); }
+export const onSyncError = (cb: (m: string) => void) => {
+  const h = (e: Event) => cb((e as CustomEvent<string>).detail);
+  window.addEventListener('ee-sync-error', h);
+  return () => window.removeEventListener('ee-sync-error', h);
+};
+
+/* ---------------------------------------------------------------------- loading */
+const last = { products: new Map<number, string>(), orders: new Map<string, string>(), reviews: new Map<number, string>(), messages: new Map<number, string>() };
+let catalogEmpty = false;
+export const isCatalogEmpty = () => catalogEmpty;
+
+export async function hydrate(): Promise<void> {
+  if (!sb) return;
+  try {
+    const kv = await sb.from('catalog_kv').select('key,value');
+    if (!kv.error) {
+      const rows = new Map((kv.data ?? []).map((r) => [r.key as string, r.value]));
+      catalogEmpty = !rows.has('products');
+      CATALOG_KEYS.forEach((k) => (rows.has(k) ? setLocal(k, rows.get(k)) : clearLocal(k)));
+      last.products = new Map(((rows.get('products') ?? []) as Product[]).map((p) => [p.id, JSON.stringify(p)]));
+      if (admin && rows.has('discounts')) setLocal('discounts', rows.get('discounts'));
+    }
+    const rv = await sb.from('reviews').select('id,data,approved').order('id');
+    if (!rv.error) {
+      const list = (rv.data ?? []).map((r) => ({ ...(r.data as object), id: r.id as number, approved: r.approved as boolean }) as Review);
+      setLocal('reviews', list);
+      last.reviews = new Map(list.map((r) => [r.id, JSON.stringify(r)]));
+    }
+    const sales = await sb.rpc('sales_summary');
+    if (!sales.error) {
+      const m: Sales = {};
+      (sales.data ?? []).forEach((r: { pid: number; qty: number; last_30: number }) => { m[r.pid] = { all: r.qty, recent: r.last_30 }; });
+      setLocal('sales', m);
+    }
+    if (admin) {
+      const od = await sb.from('orders').select('id,data,status').order('created_at');
+      if (!od.error) {
+        const list = (od.data ?? []).map((r) => ({ ...(r.data as Order), id: r.id as string, status: r.status as Order['status'] }));
+        setLocal('orders', list);
+        last.orders = new Map(list.map((o) => [o.id, JSON.stringify(o)]));
+      }
+      const ms = await sb.from('messages').select('id,data,is_read').order('id');
+      if (!ms.error) {
+        const list = (ms.data ?? []).map((r) => ({ ...(r.data as object), id: r.id as number, read: r.is_read as boolean }) as Message);
+        setLocal('messages', list);
+        last.messages = new Map(list.map((m) => [m.id, JSON.stringify(m)]));
+      }
+    }
+  } catch {
+    /* offline: keep the cached copy */
+  }
+}
+
+/* ---------------------------------------------------------------- admin write-through */
+let queue: Promise<void> = Promise.resolve();
+
+async function upsertKv(key: string, value: unknown) {
+  const { error } = await sb!.from('catalog_kv').upsert({ key, value, updated_at: new Date().toISOString() });
+  if (error) throw error;
+}
+
+/** Merge only the products this admin changed into the server copy, so customer-driven stock changes are not overwritten. */
+async function pushProducts(local: Product[]) {
+  const cur = await sb!.from('catalog_kv').select('value').eq('key', 'products').maybeSingle();
+  let remoteArr: Product[] = (cur.data?.value as Product[] | undefined) ?? [];
+  const localIds = new Set(local.map((p) => p.id));
+  remoteArr = remoteArr.filter((p) => !(last.products.has(p.id) && !localIds.has(p.id)));
+  for (const p of local) {
+    const was = last.products.get(p.id);
+    if (was === JSON.stringify(p)) continue;
+    const idx = remoteArr.findIndex((r) => r.id === p.id);
+    const old = was ? (JSON.parse(was) as Product) : null;
+    const next = idx >= 0 && old && old.stock === p.stock ? { ...p, stock: remoteArr[idx].stock } : p;
+    if (idx >= 0) remoteArr[idx] = next; else remoteArr.push(next);
+  }
+  await upsertKv('products', remoteArr);
+  last.products = new Map(remoteArr.map((p) => [p.id, JSON.stringify(p)]));
+  setLocal('products', remoteArr);
+}
+
+async function pushRows<T, K extends string | number>(table: string, list: T[], id: (t: T) => K, row: (t: T) => Record<string, unknown>, map: Map<K, string>, insertNew: boolean) {
+  const ids = new Set(list.map(id));
+  for (const k of [...map.keys()]) {
+    if (ids.has(k)) continue;
+    const { error } = await sb!.from(table).delete().eq('id', k);
+    if (error) throw error;
+    map.delete(k);
+  }
+  for (const t of list) {
+    const k = id(t), json = JSON.stringify(t);
+    if (map.get(k) === json) continue;
+    if (!map.has(k) && !insertNew) continue;
+    const { error } = await sb!.from(table).upsert({ id: k, ...row(t) });
+    if (error) throw error;
+    map.set(k, json);
+  }
+}
+
+function pushKey(k: string, v: unknown) {
+  if (!sb || !admin) return;
+  queue = queue.then(async () => {
+    try {
+      if (k === 'products') await pushProducts(v as Product[]);
+      else if ((CATALOG_KEYS as readonly string[]).includes(k) || k === 'discounts') await upsertKv(k, v);
+      else if (k === 'orders') await pushRows('orders', v as Order[], (o) => o.id, (o) => ({ data: o, email: o.email.toLowerCase(), status: o.status }), last.orders, false);
+      else if (k === 'reviews') await pushRows('reviews', v as Review[], (r) => r.id, (r) => { const { id, approved, ...data } = r; void id; return { data, approved }; }, last.reviews, false);
+      else if (k === 'messages') await pushRows('messages', v as Message[], (m) => m.id, (m) => { const { id, read, ...data } = m; void id; return { data, is_read: read }; }, last.messages, false);
+    } catch (e) {
+      fail('Could not save to the server: ' + ((e as { message?: string }).message ?? 'unknown error') + '. Refresh and try again.');
+      void hydrate();
+    }
+  });
+}
+registerPush(pushKey);
+
+/** Admin: upload the starter catalogue to an empty server. */
+export async function publishStarter(): Promise<string> {
+  if (!sb || !admin) return 'Sign in as admin first.';
+  try {
+    const c = starterCatalog();
+    for (const k of [...CATALOG_KEYS, 'discounts'] as const) await upsertKv(k, c[k]);
+    await hydrate();
+    return '';
+  } catch (e) {
+    return (e as { message?: string }).message ?? 'Failed';
+  }
+}
+
+/* --------------------------------------------------------------- customer actions */
+export async function placeOrder(order: Order): Promise<string> {
+  const { data, error } = await sb!.rpc('place_order', { o: order });
+  if (error) throw error;
+  void hydrate();
+  return data as string;
+}
+
+export async function fetchOrder(id: string, email: string): Promise<Order | null> {
+  if (!sb) return null;
+  const { data } = await sb.rpc('get_order', { oid: id.trim().toUpperCase(), mail: email.trim() });
+  return (data as Order | null) ?? null;
+}
+
+export async function submitReview(r: Omit<Review, 'id' | 'approved'>): Promise<void> {
+  const { error } = await sb!.from('reviews').insert({ data: r, approved: false });
+  if (error) throw error;
+}
+
+export async function sendMessage(m: Omit<Message, 'id' | 'read'>): Promise<void> {
+  const { error } = await sb!.from('messages').insert({ data: m, is_read: false });
+  if (error) throw error;
+}
+
+export async function checkDiscount(code: string): Promise<Discount | null> {
+  const { data } = await sb!.rpc('check_discount', { c: code });
+  return (data as Discount | null) ?? null;
+}
+
+/** Startup: load public data, restore any admin session, and keep the page fresh. */
+export function startSync() {
+  if (!remote) return;
+  void hydrate().then(refreshAdmin);
+  sb!.auth.onAuthStateChange(() => { void refreshAdmin(); });
+  window.addEventListener('focus', () => { void hydrate(); });
+  window.setInterval(() => { if (document.visibilityState === 'visible') void hydrate(); }, 60000);
+}

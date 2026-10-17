@@ -1,21 +1,17 @@
 import { useState } from 'react';
 import { useApp } from '../AppContext';
 import { ErrorText } from './ui';
-import { get, money } from '../store';
-import type { Discount } from '../types';
 
 /** Discount code entry / applied state shared by the basket and checkout summaries. */
 export function DiscountBox() {
-  const { disc, setDisc, totals, flash } = useApp();
+  const { disc, setDisc, applyCode, flash } = useApp();
   const [code, setCode] = useState('');
   const [err, setErr] = useState('');
 
-  const apply = () => {
-    const c = code.trim().toUpperCase();
-    const d = get<Discount[]>('discounts', []).find((x) => x.active && x.code === c);
-    if (!d) return setErr('Code not recognised.');
-    if (totals.sub < (d.min || 0)) return setErr('Spend ' + money(d.min) + ' or more to use this code.');
-    setDisc(d.code); setErr(''); setCode(''); flash('Code applied');
+  const apply = async () => {
+    const e = await applyCode(code);
+    if (e) return setErr(e);
+    setErr(''); setCode(''); flash('Code applied');
   };
 
   if (disc) {

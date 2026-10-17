@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { EMPTY, STATUS_COLORS, DEFAULT_SETTINGS, fmtDate, get, money, set, useStored } from '../store';
 import { Chip, ErrorText, Field, useForm } from '../components/ui';
 import { go } from '../router';
+import { remote } from '../remote';
 import type { Discount, Message, Order, OrderStatus, Product, Review, Settings, User } from '../types';
 import { orderView } from '../commerce';
 
@@ -348,7 +349,7 @@ export function SettingsView() {
           <Field label="Gift box fee (Rs)" type="number" {...bind('sbox')} />
           <Field label="Free colours in a blend" type="number" {...bind('sfc')} />
           <Field label="Fee per extra colour (Rs)" type="number" {...bind('sxc')} />
-          <Field label="New admin password (optional)" type="password" {...bind('spw')} span={2} autoComplete="new-password" />
+          {!remote && <Field label="New admin password (optional)" type="password" {...bind('spw')} span={2} autoComplete="new-password" />}
         </div>
         <ErrorText>{err}</ErrorText>
         {ok && <div className="ok">{ok}</div>}
