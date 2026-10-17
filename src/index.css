@@ -125,8 +125,18 @@ button { color: inherit; }
 .cookie { position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 55; max-width: 560px; background: #fff; border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 0 4px rgba(0, 0, 0, 0.3); padding: 16px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
 
 /* product cards */
-.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
-.pcard { background: #fff; border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 24px; }
+/* five-up home grid: 3 + 2 rows, each row filling the width */
+.pgrid.five { grid-template-columns: repeat(6, 1fr); gap: 32px 24px; }
+.pgrid.five > * { grid-column: span 2; }
+.pgrid.five > :nth-child(n+4) { grid-column: span 3; }
+.pgrid.five > :nth-child(n+4) .thumb { aspect-ratio: 4 / 3; }
+@media (max-width: 900px) { .pgrid.five { grid-template-columns: repeat(2, 1fr); } .pgrid.five > *, .pgrid.five > :nth-child(n+4) { grid-column: auto; } .pgrid.five > :last-child { grid-column: 1 / -1; } }
+@media (max-width: 560px) { .pgrid.five { grid-template-columns: 1fr; } }
+.pcard { background: #fff; border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+.pcard .foot { margin-top: auto; display: flex; flex-direction: column; gap: 12px; padding: 0 4px 4px; }
+.pcard .foot .acts { display: flex; gap: 8px; }
+.pcard .foot .acts > * { flex: 1; white-space: nowrap; }
 .pcard .thumb { aspect-ratio: 1; justify-content: space-between; gap: 8px; text-decoration: none; }
 .pcard .badge { background: #fff; border-radius: 4px; padding: 2px 8px; color: var(--ink); font-weight: 600; }
 .pcard .name { font-size: 18px; font-weight: 500; line-height: 24px; color: var(--ink); text-decoration: none; }

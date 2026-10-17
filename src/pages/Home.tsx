@@ -62,14 +62,14 @@ export function Home() {
       </section>
 
       <section className="page">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap', marginBottom: 32 }}>
           <div>
             <h2 className="h2">Five Shapes, Five Scents</h2>
             <p className="muted" style={{ margin: '4px 0 0' }}>Choose a shape, then choose a scent.</p>
           </div>
           <a href="#/shop" className="btn ghost">View All</a>
         </div>
-        <div className="pgrid">{active.slice(0, 5).map((p) => <ProductCard key={p.id} p={p} />)}</div>
+        <div className="pgrid five">{active.slice(0, 5).map((p) => <ProductCard key={p.id} p={p} />)}</div>
       </section>
 
       <section className="band-dark">
@@ -86,7 +86,7 @@ export function Home() {
 
       <section id="gallery" className="page-72">
         <h2 className="h2" style={{ marginBottom: 24 }}>Gallery</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 24 }}>
           {GALLERY.map((g) => (
             <Ph key={g.t} tint={g.tint} label={g.t} ratio={g.ratio} style={{ borderRadius: 16, border: '1px solid var(--line)' }} />
           ))}
