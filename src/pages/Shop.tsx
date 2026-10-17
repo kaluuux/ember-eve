@@ -10,10 +10,12 @@ type Sort = 'feat' | 'lo' | 'hi' | 'az';
 
 /** Filters come from the URL (?cat=, ?shelf=, ?season=, ?q=) so home links and the menu can deep-link here. */
 export function Shop({ route }: { route: Route }) {
-  const { active, categories, liveSeasons, shelf } = useApp();
+  const { active, seasonal: seasonalAll, seasons, categories, liveSeasons, shelf } = useApp();
   const cat = route.q.cat || '';
   const shelfId = (route.q.shelf || '') as Shelf | '';
   const season = route.q.season || '';
+  /** Seasonal browse: every seasonal candle, even for seasons that are closed right now */
+  const seasonalMode = route.q.seasonal === '1';
   const q = (route.q.q || '').toLowerCase();
   const [sort, setSort] = useState<Sort>('feat');
   const [capPct, setCapPct] = useState(100);
@@ -24,7 +26,7 @@ export function Shop({ route }: { route: Route }) {
   const max = Math.round((top * capPct) / 100 / step) * step || top;
 
   const list = useMemo(() => {
-    let l = shelfId ? shelf(shelfId) : active.slice();
+    let l = seasonalMode ? seasonalAll.slice() : shelfId ? shelf(shelfId) : active.slice();
     if (cat) l = l.filter((p) => p.cat === cat);
     if (season) l = l.filter((p) => p.season === season);
     if (q) l = l.filter((p) => (p.name + ' ' + p.blurb + ' ' + p.groups.map((g) => g.options.map((o) => o.label).join(' ')).join(' ')).toLowerCase().includes(q));
@@ -34,17 +36,17 @@ export function Shop({ route }: { route: Route }) {
     if (sort === 'hi') l.sort((a, b) => lowestPrice(b) - lowestPrice(a));
     if (sort === 'az') l.sort((a, b) => a.name.localeCompare(b.name));
     return l;
-  }, [active, shelf, shelfId, cat, season, q, capPct, max, stockOnly, sort]);
+  }, [active, seasonalAll, seasonalMode, shelf, shelfId, cat, season, q, capPct, max, stockOnly, sort]);
 
   const link = (o: { cat?: string; shelf?: string; season?: string }) => {
-    const n = { cat, shelf: shelfId, season, ...o };
+    const n = { cat, shelf: shelfId, season, seasonal: seasonalMode ? '1' : '', ...o };
     const qs = new URLSearchParams();
     Object.entries(n).forEach(([k, v]) => { if (v) qs.set(k, v); });
     if (route.q.q) qs.set('q', route.q.q);
     go('shop' + (qs.toString() ? '?' + qs.toString() : ''));
   };
   const clear = () => { setCapPct(100); setStockOnly(false); go('shop'); };
-  const title = shelfId ? SHELVES.find((s) => s.id === shelfId)?.title : season ? liveSeasons.find((s) => s.id === season)?.name : categories.find((c) => c.id === cat)?.name;
+  const title = seasonalMode ? (season ? seasons.find((s) => s.id === season)?.name : 'Seasonal Candles') : shelfId ? SHELVES.find((s) => s.id === shelfId)?.title : season ? liveSeasons.find((s) => s.id === season)?.name : categories.find((c) => c.id === cat)?.name;
 
   return (
     <section className="page">
@@ -72,14 +74,26 @@ export function Shop({ route }: { route: Route }) {
               {categories.map((c) => <Chip key={c.id} on={cat === c.id} onClick={() => link({ cat: c.id })}>{c.name}</Chip>)}
             </div>
           </div>
-          <div>
-            <div className="label-s">Collections</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <Chip on={!shelfId && !season} onClick={() => link({ shelf: '', season: '' })}>All</Chip>
-              {SHELVES.filter((s) => shelf(s.id).length > 0).map((s) => <Chip key={s.id} on={shelfId === s.id} onClick={() => link({ shelf: s.id, season: '' })}>{s.title}</Chip>)}
-              {liveSeasons.map((s) => <Chip key={s.id} on={season === s.id} onClick={() => link({ season: s.id, shelf: '' })}>{s.name.replace(' Collection', '')}</Chip>)}
+          {seasonalMode ? (
+            <div>
+              <div className="label-s">Season</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <Chip on={!season} onClick={() => link({ season: '' })}>All seasons</Chip>
+                {seasons.filter((s) => seasonalAll.some((p) => p.season === s.id)).map((s) => (
+                  <Chip key={s.id} on={season === s.id} onClick={() => link({ season: s.id })}>{s.name.replace(' Collection', '')}{liveSeasons.some((l) => l.id === s.id) ? ' · now' : ''}</Chip>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div>
+              <div className="label-s">Collections</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <Chip on={!shelfId && !season} onClick={() => link({ shelf: '', season: '' })}>All</Chip>
+                {SHELVES.filter((s) => shelf(s.id).length > 0).map((s) => <Chip key={s.id} on={shelfId === s.id} onClick={() => link({ shelf: s.id, season: '' })}>{s.title}</Chip>)}
+                {liveSeasons.map((s) => <Chip key={s.id} on={season === s.id} onClick={() => link({ season: s.id, shelf: '' })}>{s.name.replace(' Collection', '')}</Chip>)}
+              </div>
+            </div>
+          )}
           <div>
             <div className="label-s">Up to {money(max)}</div>
             <input type="range" min={10} max={100} step={5} value={capPct} onChange={(e) => setCapPct(Number(e.target.value))} aria-label="Maximum price" style={{ width: '100%', accentColor: '#8F6642' }} />

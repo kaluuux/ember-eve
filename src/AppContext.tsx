@@ -17,6 +17,8 @@ interface Ctx {
   categories: Category[];
   seasons: Season[];
   liveSeasons: Season[];
+  /** Every active seasonal candle, including seasons that are closed right now (for the Seasonal browse page) */
+  seasonal: Product[];
   shelf: (kind: Shelf) => Product[];
   settings: Settings;
   reviews: Review[];
@@ -86,6 +88,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const active = useMemo(() => visibleProducts(products, seasons), [products, seasons]);
+  const seasonal = useMemo(() => products.filter((p) => p.active && p.season), [products]);
   const liveSeasons = useMemo(() => seasons.filter((x) => active.some((p) => p.season === x.id)), [seasons, active]);
   const sales = useMemo(() => (remote ? salesStored : salesFromOrders(orders)), [salesStored, orders]);
   const shelf = useCallback((kind: Shelf) => shelfProducts(kind, active, sales), [active, sales]);
@@ -158,7 +161,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const acceptCookie = useCallback(() => set('cookie', true), []);
 
   const value: Ctx = {
-    products, active, colors, categories, seasons, liveSeasons, shelf, settings, reviews, cart, wish, user, disc, setDisc, applyCode, discObj, totals, toast, flash, cartOpen, setCartOpen,
+    products, active, colors, categories, seasons, liveSeasons, seasonal, shelf, settings, reviews, cart, wish, user, disc, setDisc, applyCode, discObj, totals, toast, flash, cartOpen, setCartOpen,
     qv, setQv, addCandle, addLine, setQty, clearCart, toggleWish, signIn, signOut, cookieAccepted, acceptCookie,
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;

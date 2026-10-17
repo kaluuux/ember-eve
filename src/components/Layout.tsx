@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useApp } from '../AppContext';
 import { go } from '../router';
 import { get, isEmail, money, set } from '../store';
@@ -6,8 +6,28 @@ import type { Subscriber } from '../types';
 import { CartDrawer } from './CartDrawer';
 import { QuickViewModal } from './QuickViewModal';
 
+/** Click (or hover on desktop) to open; closes on outside click, Escape, or choosing a link. */
+function NavDropdown({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  return (
+    <div className="dd" ref={ref} onMouseEnter={() => matchMedia('(hover: hover)').matches && setOpen(true)} onMouseLeave={() => matchMedia('(hover: hover)').matches && setOpen(false)}>
+      <button type="button" className="dd-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>{label} <span aria-hidden="true" style={{ fontSize: 10 }}>▾</span></button>
+      {open && <div className="dd-menu" role="menu" onClick={() => setOpen(false)}>{children}</div>}
+    </div>
+  );
+}
+
 export function Layout({ children }: { children: ReactNode }) {
-  const { settings, categories, liveSeasons, cart, wish, user, setCartOpen, toast, flash, cookieAccepted, acceptCookie } = useApp();
+  const { settings, categories, liveSeasons, seasonal, cart, wish, user, setCartOpen, toast, flash, cookieAccepted, acceptCookie } = useApp();
   const [hq, setHq] = useState('');
   const [nl, setNl] = useState('');
   const cartCount = cart.reduce((a, x) => a + x.qty, 0);
@@ -32,7 +52,10 @@ export function Layout({ children }: { children: ReactNode }) {
           </a>
           <nav className="nav" aria-label="Main">
             <a href="#/shop">Shop</a>
-            {categories.map((c) => <a key={c.id} href={'#/shop?cat=' + c.id}>{c.name.replace(' Candles', '')}</a>)}
+            <NavDropdown label="Our Collection">
+              {categories.map((c) => <a key={c.id} role="menuitem" href={'#/shop?cat=' + c.id}>{c.name.replace(' Candles', '')}</a>)}
+              {seasonal.length > 0 && <a role="menuitem" href="#/shop?seasonal=1">Seasonal</a>}
+            </NavDropdown>
             {liveSeasons.map((x) => <a key={x.id} href={'#/shop?season=' + x.id} style={{ color: '#F2C9A0' }}>{x.name.replace(' Collection', '')}</a>)}
             <a href="#/gifts">Gift Box</a>
             <a href="#/about">About</a>
