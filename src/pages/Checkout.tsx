@@ -2,14 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../AppContext';
 import { DiscountBox } from '../components/DiscountBox';
 import { BankAccounts } from '../components/BankAccounts';
+import { CheckoutGate } from '../components/CheckoutGate';
 import { Summary } from './Cart';
 import { ErrorText, Field, useForm } from '../components/ui';
 import { computeTotals, lineText, type Totals } from '../commerce';
-import { SL_DISTRICTS, get, isEmail, money, set, setLocal } from '../store';
+import { EMPTY, SL_DISTRICTS, addressBook, get, isEmail, money, set, setLocal, useStored } from '../store';
 import { remote } from '../remote';
-import { orderErrorText, placeOrder, quoteOrder } from '../sync';
+import { orderErrorText, placeOrder, quoteOrder, saveProfile } from '../sync';
 import { go } from '../router';
-import type { CartLine, Order, PayMethod, Product, User } from '../types';
+import type { CartLine, Order, PayMethod, Product, SavedAddress, User } from '../types';
 
 type ShipM = 'standard' | 'express' | 'pickup';
 
@@ -22,8 +23,21 @@ const PAY_INFO: Record<PayMethod, { title: string; sub: string }> = {
 
 export function Checkout() {
   const { cart, user, disc, discObj, settings: st, clearCart, flash } = useApp();
-  const saved = useMemo(() => (user ? get<User[]>('users', []).find((u) => u.id === user.id)?.address ?? {} : {}), [user]);
+  const users = useStored<User[]>('users', EMPTY);
+  const me = useMemo(() => (user ? users.find((u) => u.id === user.id) : undefined), [user, users]);
+  const book = useMemo(() => addressBook(me), [me]);
+  const dflt = book.find((a) => a.isDefault) ?? book[0];
+  const saved = useMemo(() => (dflt ? { first: dflt.name.split(' ')[0], last: dflt.name.split(' ').slice(1).join(' '), phone: dflt.phone || me?.phone || '', a1: dflt.a1, a2: dflt.a2, city: dflt.city, district: dflt.district, post: dflt.post } : me?.phone ? { phone: me.phone, first: me.name.split(' ')[0], last: me.name.split(' ').slice(1).join(' ') } : {}), [dflt, me]);
   const { bind, str, set: patch } = useForm({ ...saved, email: user?.email ?? '' });
+  const [guest, setGuest] = useState(() => { try { return sessionStorage.getItem('ee_guest') === '1'; } catch { return false; } });
+  const [addrId, setAddrId] = useState('');
+  const [saveNew, setSaveNew] = useState(true);
+  const [addrLabel, setAddrLabel] = useState('');
+  const chosen = addrId || dflt?.id || 'new';
+  const useAddress = (a: SavedAddress | null) => {
+    if (a) { setAddrId(a.id); patch({ a1: a.a1, a2: a.a2, city: a.city, district: a.district, post: a.post }); }
+    else { setAddrId('new'); patch({ a1: '', a2: '', city: '', district: '', post: '' }); }
+  };
   // fill the form from the saved address once it is available (it can arrive from the server after first render)
   const savedKey = JSON.stringify(saved) + (user?.email ?? '');
   useEffect(() => { patch({ ...saved, email: user?.email ?? '' }); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [savedKey]);
@@ -107,7 +121,7 @@ export function Checkout() {
       const iso = new Date().toISOString(), p = payload();
       order = {
         id: 'EE-' + nextNum, date: iso, email: p.email, name: p.name, first: p.first, phone: p.phone, address: p.address,
-        items: cart.map((l) => ({ name: l.name, sub: l.sub, qty: l.qty, unit: l.unit, tint: l.tint, pid: l.pid, ...(l.note ? { note: l.note } : {}), ...(l.box ? { box: l.box.map((c) => ({ pid: c.pid, name: get<Product[]>('products', []).find((x) => x.id === c.pid)?.name ?? '' })) } : {}) })),
+        items: cart.map((l) => ({ name: l.name, sub: l.sub, qty: l.qty, unit: l.unit, tint: l.tint, pid: l.pid, ...(l.sel ? { sel: l.sel } : {}), ...(l.note ? { note: l.note } : {}), ...(l.box ? { box: l.box.map((c) => ({ pid: c.pid, name: get<Product[]>('products', []).find((x) => x.id === c.pid)?.name ?? '' })) } : {}) })),
         sub: T.sub, disc: T.disc, code: disc, ship: T.ship, shipM, wrap: T.wrap, total: T.total, status: 'Processing',
         pay: PAY_INFO[pay].title, payMethod: pay, payBank: pay === 'bank' ? bank?.bank ?? null : null, payStatus: 'Pending', note: p.note, sellerNote: p.sellerNote, userId: user ? user.id : null, log: [{ s: 'Placed', d: iso }],
       };
@@ -122,6 +136,12 @@ export function Checkout() {
       set('orders', orders.concat(order));
     }
     setBusy(false);
+    if (user && shipM !== 'pickup' && chosen === 'new' && saveNew && str('a1').trim()) {
+      const entry: SavedAddress = { id: 'a' + Date.now().toString(36), label: addrLabel.trim() || (book.length ? 'Address ' + (book.length + 1) : 'Home'), name: (str('first') + ' ' + str('last')).trim(), phone: str('phone').trim(), a1: str('a1').trim(), a2: str('a2').trim(), city: str('city').trim(), district: str('district'), post: str('post').trim(), isDefault: book.length === 0 };
+      const next = book.concat(entry);
+      if (remote) void saveProfile({ addresses: next, phone: me?.phone || str('phone').trim() });
+      else set('users', get<User[]>('users', []).map((u) => (u.id === user.id ? { ...u, addresses: next } : u)));
+    }
     set('myorders', get<string[]>('myorders', []).concat(order.id));
     clearCart();
     go('order/' + order.id + '?new=1');
@@ -138,6 +158,8 @@ export function Checkout() {
           <div style={{ fontSize: 18, fontWeight: 500 }}>Your basket is empty.</div>
           <a href="#/shop" className="btn">Start Shopping</a>
         </div>
+      ) : !user && !guest ? (
+        <CheckoutGate onGuest={() => { try { sessionStorage.setItem('ee_guest', '1'); } catch { /* ignore */ } setGuest(true); }} />
       ) : (
         <>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
@@ -151,7 +173,7 @@ export function Checkout() {
                 <div className="card stack" style={{ gap: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                     <div className="h3">Your details</div>
-                    {!user && <a href="#/login?next=checkout" style={{ fontSize: 14, fontWeight: 500 }}>Have an account? Sign in</a>}
+                    {user ? <span className="muted">Signed in as {user.email}</span> : <span className="muted">Checking out as a guest · <a href="#/login?next=checkout">Sign in instead</a></span>}
                   </div>
                   <div className="fields two">
                     {field('email', 'Email', { type: 'email', ph: 'you@example.com', span: 2 })}
@@ -175,7 +197,24 @@ export function Checkout() {
                   {([['standard', 'Standard delivery', '3 to 5 working days', stdFree ? 'Free' : money(computeTotals(cart, discObj, st, 'standard', false, district).ship)], ['express', 'Express delivery', 'Next working day (Colombo area and main cities)', money(st.express)], ...(pickupOn ? [['pickup', 'Store pickup', st.pickupAddress, 'Free']] : [])] as [ShipM, string, string, string][]).map(([id, label, eta, price]) => (
                     <OptionRow key={id} on={shipM === id} onClick={() => setShipM(id)} title={label} sub={eta} price={price} />
                   ))}
-                  {shipM !== 'pickup' && (
+                  {shipM !== 'pickup' && book.length > 0 && (
+                    <div className="stack" style={{ gap: 8 }}>
+                      <div className="label-s" style={{ margin: 0 }}>Deliver to</div>
+                      <div className="addr-pick" role="radiogroup" aria-label="Saved addresses">
+                        {book.map((a) => (
+                          <button key={a.id} type="button" role="radio" aria-checked={chosen === a.id} className={'addr-card' + (chosen === a.id ? ' on' : '')} onClick={() => useAddress(a)}>
+                            <b>{a.label || 'Address'}</b>{a.isDefault && <span className="tagpill" style={{ marginLeft: 8 }}>Default</span>}
+                            <span>{a.name}{a.phone ? ' · ' + a.phone : ''}</span>
+                            <span>{[a.a1, a.a2, a.city, a.district].filter(Boolean).join(', ')}</span>
+                          </button>
+                        ))}
+                        <button type="button" role="radio" aria-checked={chosen === 'new'} className={'addr-card new' + (chosen === 'new' ? ' on' : '')} onClick={() => useAddress(null)}>
+                          <b>+ Use a different address</b>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {shipM !== 'pickup' && chosen === 'new' && (
                     <div className="fields two">
                       {field('a1', 'Address', { span: 2 })}
                       {field('a2', 'Apartment, landmark (optional)', { span: 2 })}
@@ -187,6 +226,14 @@ export function Checkout() {
                         </select>
                       </label>
                       {field('post', 'Postal code (optional)')}
+                      {user && (
+                        <div className="span2 stack" style={{ gap: 8 }}>
+                          <label style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 14, cursor: 'pointer' }}>
+                            <input type="checkbox" checked={saveNew} onChange={(e) => setSaveNew(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#8F6642' }} /> Save this address to my account
+                          </label>
+                          {saveNew && <input className="input" aria-label="Address label" placeholder="Label, e.g. Home, Work (optional)" value={addrLabel} onChange={(e) => setAddrLabel(e.target.value)} />}
+                        </div>
+                      )}
                     </div>
                   )}
                   <OptionRow on={wrap} onClick={() => setWrap(!wrap)} title="Gift wrap" sub="Kraft box, ribbon and message card" price={money(st.giftWrap)} />

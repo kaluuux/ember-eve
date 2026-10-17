@@ -79,6 +79,7 @@ function OrderDetail({ o, settings, flash }: { o: Order; settings: Settings; fla
   const [courier, setCourier] = useState(o.tracking?.courier || 'Domex');
   const [num, setNum] = useState(o.tracking?.number ?? '');
   const [url, setUrl] = useState(o.tracking?.url ?? '');
+  const [note, setNote] = useState(o.adminNote ?? '');
   const receipts = o.receipts ?? [];
   useEffect(() => { if (remote && receipts.length) void receiptLinks(receipts).then(setLinks); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [receipts.join('|')]);
 
@@ -107,6 +108,7 @@ function OrderDetail({ o, settings, flash }: { o: Order; settings: Settings; fla
   const approve = () => update((x) => { x.payStatus = 'Paid'; log(x, 'Payment approved'); }, 'Payment approved for ' + o.id);
   const reject = () => update((x) => { x.payStatus = 'Failed'; log(x, 'Payment rejected'); }, 'Payment marked as rejected');
   const reopen = () => update((x) => { x.payStatus = 'Pending'; log(x, 'Payment reopened'); }, 'Payment reopened');
+  const saveNote = () => update((x) => { x.adminNote = note.trim(); }, 'Note saved');
   const saveTracking = () => update((x) => { x.tracking = { courier, number: num.trim(), url: url.trim() }; log(x, 'Tracking added'); }, 'Tracking saved');
 
   const next = ({ Processing: 'Dispatched', Dispatched: 'Delivered' } as Partial<Record<OrderStatus, OrderStatus>>)[o.status];
@@ -180,6 +182,12 @@ function OrderDetail({ o, settings, flash }: { o: Order; settings: Settings; fla
         </div>
         <input className="input" style={{ marginTop: 8 }} aria-label="Tracking link" placeholder="Tracking link (optional)" value={url} onChange={(e) => setUrl(e.target.value)} />
         <div style={{ marginTop: 8 }}><button type="button" className="btn-xs" disabled={!num.trim()} onClick={saveTracking}>Save tracking</button></div>
+      </div>
+
+      <div className="block">
+        <h4>Internal note (only you can see this)</h4>
+        <textarea className="input" rows={2} aria-label="Internal note" placeholder="e.g. regular customer, wrap extra carefully, called to confirm" value={note} onChange={(e) => setNote(e.target.value)} />
+        <div style={{ marginTop: 8 }}><button type="button" className="btn-xs" disabled={note.trim() === (o.adminNote ?? '')} onClick={saveNote}>Save note</button></div>
       </div>
 
       <div className="block">

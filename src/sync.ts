@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { sb, remote } from './remote';
 import { clearLocal, registerPush, setLocal, starterCatalog } from './store';
 import { go } from './router';
-import type { Address, Discount, Message, Order, Product, Review, Session } from './types';
+import type { Address, Discount, Message, Order, Product, Review, SavedAddress, Session } from './types';
 
 /**
  * Server sync (Supabase). Public data is loaded for everyone; admin edits are written through.
@@ -85,9 +85,9 @@ export async function hydrate(): Promise<void> {
         setLocal('orders', list);
         last.orders = new Map(list.map((o) => [o.id, JSON.stringify(o)]));
       }
-      const pr = await sb.from('profiles').select('id,email,name,address,created_at').order('created_at');
+      const pr = await sb.from('profiles').select('id,email,name,phone,address,addresses,created_at').order('created_at');
       if (!pr.error) {
-        setLocal('users', (pr.data ?? []).map((r) => ({ id: r.id, name: r.name ?? '', email: r.email ?? '', password: '', address: r.address ?? {}, joined: String(r.created_at).slice(0, 10) })));
+        setLocal('users', (pr.data ?? []).map((r) => ({ id: r.id, name: r.name ?? '', email: r.email ?? '', password: '', phone: r.phone ?? '', address: r.address ?? {}, addresses: r.addresses ?? [], joined: String(r.created_at).slice(0, 10) })));
       }
       const ms = await sb.from('messages').select('id,data,is_read').order('id');
       if (!ms.error) {
@@ -246,6 +246,19 @@ export async function receiptLinks(paths: string[]): Promise<{ path: string; url
   return (data ?? []).filter((d) => d.signedUrl).map((d) => ({ path: d.path ?? '', url: d.signedUrl as string }));
 }
 
+export interface TrackResult {
+  id: string; date: string; status: Order['status']; payStatus: NonNullable<Order['payStatus']>; payMethod?: string; shipM: Order['shipM'];
+  tracking?: Order['tracking'] | null; log: { s: string; d: string }[]; city?: string; district?: string; first?: string;
+  items: { name: string; qty: number; tint: string }[];
+}
+/** Anyone can look up an order with the mobile number it was placed with plus the order number or courier tracking number. */
+export async function trackOrder(q: string, phone: string): Promise<{ result: TrackResult | null; error: string }> {
+  if (!sb) return { result: null, error: '' };
+  const { data, error } = await sb.rpc('track_order', { q, phone });
+  if (error) return { result: null, error: /rate_limited/.test(error.message) ? 'Too many attempts. Please wait a few minutes and try again.' : 'Could not look that up. Please try again.' };
+  return { result: (data as TrackResult | null) ?? null, error: '' };
+}
+
 export async function myOrders(): Promise<Order[]> {
   if (!sb) return [];
   const { data } = await sb.rpc('my_orders');
@@ -297,6 +310,13 @@ export async function customerSignIn(email: string, password: string): Promise<s
   const { error } = await sb.auth.signInWithPassword({ email: email.trim(), password });
   return error ? authText(error.message) : '';
 }
+/** Sign in (or sign up) with Google. Needs the Google provider switched on in Supabase. */
+export async function signInWithGoogle(next = 'account'): Promise<string> {
+  if (!sb) return 'Accounts need the online store.';
+  try { localStorage.setItem('ee_next', next); } catch { /* ignore */ }
+  const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + '/' } });
+  return error ? 'Google sign-in is not available right now.' : '';
+}
 export async function customerSignOut() { await sb?.auth.signOut(); }
 export async function requestReset(email: string): Promise<string> {
   if (!sb) return 'Not connected.';
@@ -308,7 +328,7 @@ export async function updatePassword(password: string): Promise<string> {
   const { error } = await sb.auth.updateUser({ password });
   return error ? authText(error.message) : '';
 }
-export async function saveProfile(patch: { name?: string; address?: Address }): Promise<string> {
+export async function saveProfile(patch: { name?: string; phone?: string; address?: Address; addresses?: SavedAddress[] }): Promise<string> {
   if (!sb) return 'Not connected.';
   const { data } = await sb.auth.getSession();
   const id = data.session?.user.id;
@@ -325,11 +345,11 @@ async function loadAccount(): Promise<void> {
   const { data } = await sb.auth.getSession();
   const u = data.session?.user;
   if (!u) { clearLocal('session'); return; }
-  const pr = await sb.from('profiles').select('name,address,created_at').eq('id', u.id).maybeSingle();
+  const pr = await sb.from('profiles').select('name,phone,address,addresses,created_at').eq('id', u.id).maybeSingle();
   const name = (pr.data?.name as string | undefined) || (u.user_metadata?.name as string | undefined) || (u.email ?? '').split('@')[0];
   setLocal<Session>('session', { id: u.id, name, email: u.email ?? '' });
   if (!admin) {
-    setLocal('users', [{ id: u.id, name, email: u.email ?? '', password: '', address: (pr.data?.address as Address | undefined) ?? {}, joined: String(pr.data?.created_at ?? '').slice(0, 10) }]);
+    setLocal('users', [{ id: u.id, name, email: u.email ?? '', password: '', phone: (pr.data?.phone as string | undefined) ?? '', address: (pr.data?.address as Address | undefined) ?? {}, addresses: (pr.data?.addresses as SavedAddress[] | undefined) ?? [], joined: String(pr.data?.created_at ?? '').slice(0, 10) }]);
     const mine = await sb.rpc('my_orders');
     if (!mine.error) {
       const list = (mine.data as Order[] | null) ?? [];
@@ -428,6 +448,11 @@ export function startSync() {
     // sign-in / sign-out / password-reset link: refresh who we are, outside the auth callback
     window.setTimeout(() => { void refreshAdmin().then(loadAccount); }, 0);
     if (event === 'PASSWORD_RECOVERY') go('reset');
+    if (event === 'SIGNED_IN') {
+      let next = '';
+      try { next = localStorage.getItem('ee_next') ?? ''; localStorage.removeItem('ee_next'); } catch { /* ignore */ }
+      if (next) go(next);
+    }
   });
   window.addEventListener('focus', () => { void hydrate(); });
   window.setInterval(() => { if (document.visibilityState === 'visible') void hydrate(); }, 60000);

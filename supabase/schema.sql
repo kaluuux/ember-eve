@@ -49,6 +49,8 @@ create table if not exists profiles (
   address jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
+alter table profiles add column if not exists addresses jsonb not null default '[]'::jsonb;
+alter table profiles add column if not exists phone text;
 alter table profiles enable row level security;
 drop policy if exists "own profile read" on profiles;
 drop policy if exists "own profile update" on profiles;
@@ -82,6 +84,12 @@ alter table orders add column if not exists ip text;
 alter table orders enable row level security;
 drop policy if exists "orders admin only" on orders;
 create policy "orders admin only" on orders for all using (is_admin()) with check (is_admin());
+
+-- Keep only the fields of a selection that matter (used to rebuild an item for "Buy again").
+create or replace function ee_clean_sel(s jsonb) returns jsonb language sql immutable as $$
+  select jsonb_build_object('opts', coalesce(s -> 'opts', '{}'::jsonb), 'color', coalesce(s ->> 'color', ''),
+                            'blend', coalesce(s -> 'blend', '[]'::jsonb), 'sticker', nullif(left(btrim(coalesce(s ->> 'sticker', '')), 60), ''));
+$$;
 
 -- Price one candle from the live catalogue. Raises on any invalid option or colour.
 create or replace function ee_price(p jsonb, sel jsonb, st jsonb, pal jsonb) returns jsonb
@@ -211,12 +219,12 @@ begin
         r := ee_price(p, c -> 'sel', st, pal);
         unit := unit + (r ->> 'unit')::numeric;
         parts := parts || ((p ->> 'name') || ' [' || (r ->> 'desc') || ']');
-        box := box || jsonb_build_object('pid', (p ->> 'id')::bigint, 'name', p ->> 'name');
+        box := box || jsonb_build_object('pid', (p ->> 'id')::bigint, 'name', p ->> 'name', 'sel', ee_clean_sel(c -> 'sel'));
         first_hex := coalesce(first_hex, r ->> 'hex');
         need := jsonb_set(need, array[p ->> 'id'], to_jsonb(coalesce((need ->> (p ->> 'id'))::int, 0) + qty));
       end loop;
       items := items || jsonb_build_object('pid', 0, 'name', 'Gift Box (' || slots || ' candles)', 'sub', array_to_string(parts, '; '),
-        'qty', qty, 'unit', unit, 'tint', coalesce(first_hex, '#EADFD3'), 'box', box,
+        'qty', qty, 'unit', unit, 'tint', coalesce(first_hex, '#EADFD3'), 'box', box, 'boxId', it ->> 'boxId',
         'note', left(btrim(coalesce(it ->> 'note', '')), 250));
     else
       select x into p from jsonb_array_elements(prods) x where (x ->> 'id') = (it ->> 'pid') limit 1;
@@ -225,7 +233,7 @@ begin
       unit := (r ->> 'unit')::numeric;
       need := jsonb_set(need, array[p ->> 'id'], to_jsonb(coalesce((need ->> (p ->> 'id'))::int, 0) + qty));
       items := items || jsonb_build_object('pid', (p ->> 'id')::bigint, 'name', p ->> 'name', 'sub', r ->> 'desc',
-        'qty', qty, 'unit', unit, 'tint', r ->> 'hex');
+        'qty', qty, 'unit', unit, 'tint', r ->> 'hex', 'sel', ee_clean_sel(it -> 'sel'));
     end if;
     sub := sub + unit * qty;
   end loop;
@@ -323,15 +331,50 @@ end $$;
 
 create or replace function get_order(oid text, mail text) returns jsonb
 language sql stable security definer set search_path = public as $$
-  select data || jsonb_build_object('status', status, 'id', id) from orders where id = oid and email = lower(btrim(mail));
+  select (data - 'adminNote') || jsonb_build_object('status', status, 'id', id) from orders where id = oid and email = lower(btrim(mail));
 $$;
 
 -- Orders belonging to the signed-in customer.
 create or replace function my_orders() returns jsonb
 language sql stable security definer set search_path = public as $$
-  select coalesce(jsonb_agg(data || jsonb_build_object('status', status, 'id', id) order by created_at desc), '[]'::jsonb)
-  from orders where user_id = auth.uid() and auth.uid() is not null;
+  select coalesce(jsonb_agg((o.data - 'adminNote') || jsonb_build_object('status', o.status, 'id', o.id) order by o.created_at desc), '[]'::jsonb)
+  from orders o
+  where auth.uid() is not null and (
+    o.user_id = auth.uid()
+    or (o.email = (select lower(u.email) from auth.users u where u.id = auth.uid() and u.email_confirmed_at is not null)));
 $$;
+
+-- Public tracking: a mobile number plus an order number or courier tracking number.
+-- Returns only status information (no email, street address or prices) and limits guessing.
+create table if not exists track_attempts (ip text not null, at timestamptz not null default now());
+alter table track_attempts enable row level security;   -- no policies on purpose
+
+create or replace function track_order(q text, phone text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_ip text := ee_ip(); key text := btrim(coalesce(q, '')); digits text := right(regexp_replace(coalesce(phone, ''), '\D', '', 'g'), 9);
+  o orders%rowtype; d jsonb;
+begin
+  if v_ip <> '' then
+    delete from track_attempts where at < now() - interval '1 day';
+    if (select count(*) from track_attempts where ip = v_ip and at > now() - interval '10 minutes') >= 20 then raise exception 'rate_limited'; end if;
+    insert into track_attempts (ip) values (v_ip);
+  end if;
+  if length(digits) < 9 or key = '' then return null; end if;
+  select * into o from orders
+   where right(regexp_replace(coalesce(data ->> 'phone', ''), '\D', '', 'g'), 9) = digits
+     and (upper(id) = upper(key) or id = 'EE-' || regexp_replace(key, '\D', '', 'g') and key ~ '^\d+$'
+          or lower(coalesce(data -> 'tracking' ->> 'number', '')) = lower(key))
+   order by created_at desc limit 1;
+  if not found then return null; end if;
+  d := o.data;
+  return jsonb_build_object('id', o.id, 'date', d ->> 'date', 'status', o.status, 'payStatus', coalesce(d ->> 'payStatus', 'Paid'),
+    'payMethod', d ->> 'payMethod', 'shipM', d ->> 'shipM', 'tracking', d -> 'tracking', 'log', coalesce(d -> 'log', '[]'::jsonb),
+    'city', d #>> '{address,city}', 'district', d #>> '{address,district}',
+    'items', (select coalesce(jsonb_agg(jsonb_build_object('name', i ->> 'name', 'qty', (i ->> 'qty')::int, 'tint', i ->> 'tint')), '[]'::jsonb) from jsonb_array_elements(coalesce(d -> 'items', '[]'::jsonb)) i),
+    'first', d ->> 'first');
+end $$;
+grant execute on function track_order(text, text) to anon, authenticated;
 
 -- Units sold per product (including candles inside gift boxes) for Best Selling / Trending. No customer data.
 create or replace function sales_summary() returns table (pid int, qty int, last_30 int)

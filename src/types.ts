@@ -87,7 +87,9 @@ export interface Settings {
 
 export interface Address { district?: string; first?: string; last?: string; phone?: string; a1?: string; a2?: string; city?: string; post?: string }
 
-export interface User { id: number; name: string; email: string; password: string; address: Address; joined: string }
+/** One entry in a customer's address book */
+export interface SavedAddress { id: string; label: string; name: string; phone: string; a1: string; a2: string; city: string; district: string; post: string; isDefault: boolean }
+export interface User { id: number | string; name: string; email: string; password: string; address: Address; addresses?: SavedAddress[]; phone?: string; joined: string }
 export interface Session { id: number | string; name: string; email: string }
 
 export interface CartLine {
@@ -109,7 +111,7 @@ export interface CartLine {
 }
 
 export interface ItemSel { opts: Record<string, string>; color: string; blend: string[]; sticker?: string }
-export interface OrderItem { name: string; sub: string; qty: number; unit: number; tint: string; pid: number; note?: string; box?: { pid: number; name: string }[] }
+export interface OrderItem { name: string; sub: string; qty: number; unit: number; tint: string; pid: number; note?: string; sel?: ItemSel; boxId?: string; box?: { pid: number; name: string; sel?: ItemSel }[] }
 export type OrderStatus = 'Processing' | 'Dispatched' | 'Delivered' | 'Cancelled';
 
 export interface Order {
@@ -140,6 +142,8 @@ export interface Order {
   note: string;
   /** Note from the buyer to the seller */
   sellerNote?: string;
+  /** Private note written by the shop owner; never sent to customers */
+  adminNote?: string;
   userId: number | string | null;
   log: { s: string; d: string }[];
 }

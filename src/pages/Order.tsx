@@ -38,6 +38,15 @@ export function Order({ route }: { route: Route }) {
         <div className="card" style={{ marginBottom: 24, background: 'var(--cream)' }}>
           <h1 className="h1">Thank you, {ord.first || ord.name.split(' ')[0]}.</h1>
           <p style={{ margin: '8px 0 0', fontSize: 16, color: 'var(--text2)' }}>We have received order {ord.id}. Keep this page or your order number to track it.</p>
+          {!user && (
+            <div className="notice-soft">
+              <div><b>Want it easier next time?</b> Create an account to save your address, see all your orders in one place and buy again in a click. This order will be waiting in your account.</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <a className="btn sm" href={'#/register?next=account&email=' + encodeURIComponent(ord.email)}>Create account</a>
+                <a className="btn ghost sm" href="#/login?next=account">Sign in</a>
+              </div>
+            </div>
+          )}
         </div>
       )}
       <PaymentPanel o={ord} st={settings} />

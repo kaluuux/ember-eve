@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { EMPTY, fmtDate, get, money, set, useStored } from '../store';
-import { PageHead, downloadCsv } from './ui';
+import { EMPTY, addressBook, fmtDate, get, money, set, useStored } from '../store';
+import { PageHead, StatusBadge, downloadCsv, waLink } from './ui';
 import { Chip, ErrorText, Field, useForm } from '../components/ui';
 import type { Discount, Message, Order, Product, Review, User } from '../types';
 
@@ -13,16 +13,18 @@ export function Customers() {
   const users = useStored<User[]>('users', EMPTY);
   const orders = useStored<Order[]>('orders', EMPTY);
   const [q, setQ] = useState('');
+  const [sel, setSel] = useState('');
 
   // registered accounts plus guests who only ever checked out
   const rows = useMemo(() => {
     const live = orders.filter((o) => o.status !== 'Cancelled');
-    const byEmail = new Map<string, { name: string; email: string; phone: string; since: string; account: boolean; os: Order[] }>();
-    users.forEach((u) => byEmail.set(u.email.toLowerCase(), { name: u.name, email: u.email, phone: u.address?.phone ?? '', since: u.joined, account: true, os: [] }));
+    const byEmail = new Map<string, { name: string; email: string; phone: string; since: string; account: boolean; user?: User; all: Order[]; os: Order[] }>();
+    users.forEach((u) => byEmail.set(u.email.toLowerCase(), { name: u.name, email: u.email, phone: u.phone || u.address?.phone || '', since: u.joined, account: true, user: u, all: [], os: [] }));
     orders.forEach((o) => {
       const k = o.email.toLowerCase();
-      const c = byEmail.get(k) ?? { name: o.name, email: o.email, phone: o.phone, since: o.date.slice(0, 10), account: false, os: [] };
+      const c = byEmail.get(k) ?? { name: o.name, email: o.email, phone: o.phone, since: o.date.slice(0, 10), account: false, all: [], os: [] };
       if (!c.phone) c.phone = o.phone;
+      c.all.push(o);
       byEmail.set(k, c);
     });
     live.forEach((o) => byEmail.get(o.email.toLowerCase())?.os.push(o));
@@ -30,27 +32,68 @@ export function Customers() {
   }, [users, orders]);
 
   const shown = rows.filter((c) => !q || (c.name + c.email + c.phone).toLowerCase().includes(q.toLowerCase()));
+  const cur = rows.find((c) => c.email.toLowerCase() === sel);
   const exportCsv = () => downloadCsv('customers', [['Name', 'Email', 'Phone', 'Account', 'Customer since', 'Orders', 'Total spent'], ...shown.map((c) => [c.name, c.email, c.phone, c.account ? 'Yes' : 'Guest', c.since, c.os.length, c.spent])]);
 
   return (
     <>
       <PageHead title="Customers" sub={rows.length + ' customers, ' + rows.filter((c) => c.account).length + ' with accounts'} actions={<button type="button" className="btn ghost sm" onClick={exportCsv}>Export CSV</button>} />
       <div className="filters"><input className="input" style={{ width: 300 }} placeholder="Search name, email, phone" aria-label="Search customers" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-      <div className="card flush" style={{ overflowX: 'auto' }}>
-        <table className="table">
-          <thead><tr><th>Name</th><th>Contact</th><th>Since</th><th>Orders</th><th style={{ textAlign: 'right' }}>Spent</th></tr></thead>
-          <tbody>
-            {shown.map((c) => (
-              <tr key={c.email}>
-                <td style={{ fontWeight: 600 }}>{c.name}{!c.account && <span className="tagpill" style={{ marginLeft: 8 }}>Guest</span>}</td>
-                <td>{c.email}<div className="muted" style={{ fontSize: 12 }}>{c.phone}</div></td>
-                <td>{c.since}</td><td>{c.os.length}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(c.spent)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {shown.length === 0 && <div className="empty">No customers yet.</div>}
+      <div className={'orders-layout' + (cur ? ' open' : '')}>
+        <div className="card flush" style={{ overflowX: 'auto' }}>
+          <table className="table">
+            <thead><tr><th>Name</th><th>Contact</th><th>Since</th><th>Orders</th><th style={{ textAlign: 'right' }}>Spent</th></tr></thead>
+            <tbody>
+              {shown.map((c) => (
+                <tr key={c.email} className={'click' + (cur?.email === c.email ? ' sel' : '')} onClick={() => setSel(c.email.toLowerCase())}>
+                  <td style={{ fontWeight: 600 }}>{c.name}{!c.account && <span className="tagpill" style={{ marginLeft: 8 }}>Guest</span>}</td>
+                  <td>{c.email}<div className="muted" style={{ fontSize: 12 }}>{c.phone}</div></td>
+                  <td>{c.since}</td><td>{c.os.length}</td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(c.spent)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {shown.length === 0 && <div className="empty">No customers yet.</div>}
+        </div>
+        {cur && (
+          <aside className="panel detail" aria-label={'Customer ' + cur.name}>
+            <div className="row-between">
+              <div><div className="h3" style={{ fontSize: 20 }}>{cur.name}</div><div className="muted" style={{ fontSize: 12 }}>{cur.account ? 'Account since ' + cur.since : 'Guest customer, first order ' + cur.since}</div></div>
+              <button type="button" className="btn-xs" onClick={() => setSel('')}>Close</button>
+            </div>
+            <div className="block">
+              <h4>Contact</h4>
+              {cur.email}<br />{cur.phone}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                {cur.phone && <a className="btn-xs" href={waLink(cur.phone, 'Hi ' + cur.name.split(' ')[0] + ', this is Ember & Eve. ')} target="_blank" rel="noreferrer">WhatsApp</a>}
+                {cur.phone && <a className="btn-xs" href={'tel:' + cur.phone}>Call</a>}
+                <a className="btn-xs" href={'mailto:' + cur.email}>Email</a>
+              </div>
+            </div>
+            <div className="block">
+              <h4>Totals</h4>
+              <div className="row-between"><span>Orders</span><b>{cur.os.length}</b></div>
+              <div className="row-between"><span>Total spent</span><b>{money(cur.spent)}</b></div>
+              <div className="row-between"><span>Average order</span><b>{money(cur.os.length ? cur.spent / cur.os.length : 0)}</b></div>
+            </div>
+            <div className="block">
+              <h4>Saved addresses</h4>
+              {addressBook(cur.user).length === 0 ? <span className="muted">None saved.</span> : addressBook(cur.user).map((a) => (
+                <div key={a.id} style={{ padding: '4px 0' }}><b>{a.label}</b>{a.isDefault && <span className="tagpill" style={{ marginLeft: 6 }}>Default</span>}<br />{a.name} · {a.phone}<br /><span className="muted">{[a.a1, a.a2, a.city, a.district].filter(Boolean).join(', ')}</span></div>
+              ))}
+            </div>
+            <div className="block">
+              <h4>Orders</h4>
+              {cur.all.length === 0 ? <span className="muted">No orders yet.</span> : cur.all.slice().sort((a, b) => b.date.localeCompare(a.date)).map((o) => (
+                <a key={o.id} href={'#/admin/orders?sel=' + o.id} className="row-between" style={{ padding: '8px 0', borderBottom: '1px solid var(--a-line-soft)', textDecoration: 'none', color: 'inherit', gap: 8 }}>
+                  <span><b>{o.id}</b> · {fmtDate(o.date, { day: 'numeric', month: 'short' })}</span>
+                  <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><StatusBadge status={o.status} /><b>{money(o.total)}</b></span>
+                </a>
+              ))}
+            </div>
+          </aside>
+        )}
       </div>
     </>
   );

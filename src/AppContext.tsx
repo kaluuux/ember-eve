@@ -39,6 +39,8 @@ interface Ctx {
   setQv: (q: QuickView | null | ((q: QuickView | null) => QuickView | null)) => void;
   addCandle: (pid: number, sel: Selection) => boolean;
   addLine: (line: CartLine) => void;
+  /** Put an earlier order's candles back in the basket. Returns how many lines were added. */
+  reorder: (o: Order) => number;
   setQty: (key: string, delta: number) => void;
   clearCart: () => void;
   toggleWish: (id: number) => void;
@@ -152,6 +154,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return '';
   }, []);
 
+  const reorder = useCallback((o: Order) => {
+    let n = 0;
+    o.items.forEach((i) => {
+      if (i.pid && i.sel && addCandle(i.pid, { opts: i.sel.opts, color: i.sel.color, blend: i.sel.blend, sticker: i.sel.sticker, qty: i.qty })) n += 1;
+    });
+    return n;
+  }, [addCandle]);
+
   const toggleWish = useCallback((id: number) => {
     const w = get<number[]>('wish', []);
     set('wish', w.includes(id) ? w.filter((x) => x !== id) : w.concat(id));
@@ -163,7 +173,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const value: Ctx = {
     products, active, colors, categories, seasons, liveSeasons, seasonal, shelf, settings, reviews, cart, wish, user, disc, setDisc, applyCode, discObj, totals, toast, flash, cartOpen, setCartOpen,
-    qv, setQv, addCandle, addLine, setQty, clearCart, toggleWish, signIn, signOut, cookieAccepted, acceptCookie,
+    qv, setQv, addCandle, addLine, reorder, setQty, clearCart, toggleWish, signIn, signOut, cookieAccepted, acceptCookie,
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

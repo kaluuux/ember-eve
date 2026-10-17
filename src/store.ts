@@ -1,6 +1,6 @@
 import { useMemo, useSyncExternalStore } from 'react';
 import { remote } from './remote';
-import type { Category, Color, Discount, Group, Order, OrderStatus, Product, Review, Season, Settings, User } from './types';
+import type { Category, Color, Discount, Group, Order, OrderStatus, Product, Review, SavedAddress, Season, Settings, User } from './types';
 
 /**
  * localStorage-backed "demo store". Mirrors the data model of the design prototype
@@ -105,6 +105,15 @@ export const withDefaults = (s: Partial<Settings> | undefined): Settings => ({
   banks: s?.banks?.length ? s.banks : s?.bank?.number ? [{ id: 'bank1', qr: '', ...s.bank }] : [],
   pay: { ...DEFAULT_SETTINGS.pay, ...s?.pay },
 });
+
+/** A customer's saved addresses: the new address book, or their old single address wrapped as one entry. */
+export function addressBook(u: Pick<User, 'name' | 'address' | 'addresses' | 'phone'> | undefined): SavedAddress[] {
+  if (!u) return [];
+  if (u.addresses?.length) return u.addresses;
+  const a = u.address;
+  if (!a?.a1) return [];
+  return [{ id: 'main', label: 'Home', name: [a.first, a.last].filter(Boolean).join(' ') || u.name, phone: a.phone || u.phone || '', a1: a.a1, a2: a.a2 ?? '', city: a.city ?? '', district: a.district ?? '', post: a.post ?? '', isDefault: true }];
+}
 
 export const SL_DISTRICTS = ['Ampara', 'Anuradhapura', 'Badulla', 'Batticaloa', 'Colombo', 'Galle', 'Gampaha', 'Hambantota', 'Jaffna', 'Kalutara', 'Kandy', 'Kegalle', 'Kilinochchi', 'Kurunegala', 'Mannar', 'Matale', 'Matara', 'Monaragala', 'Mullaitivu', 'Nuwara Eliya', 'Polonnaruwa', 'Puttalam', 'Ratnapura', 'Trincomalee', 'Vavuniya'];
 

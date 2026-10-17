@@ -2,11 +2,10 @@ import { useState } from 'react';
 import { useApp } from '../AppContext';
 import { ErrorText, Field, Ph, useForm } from '../components/ui';
 import { WhatsInside } from './Home';
-import { get, isEmail, money, set, setLocal } from '../store';
+import { get, isEmail, money, set } from '../store';
 import { remote } from '../remote';
-import { fetchOrder, sendMessage } from '../sync';
-import { go } from '../router';
-import type { Message, Order } from '../types';
+import { sendMessage } from '../sync';
+import type { Message } from '../types';
 
 const PROCESS = [
   { n: 1, t: 'Melt', d: 'High quality soy wax is melted gently and held at the right temperature.' },
@@ -166,38 +165,6 @@ export function Doc({ name }: { name: string }) {
   );
 }
 export const DOC_KEYS = ['shipping', 'care', 'privacy', 'terms'];
-
-export function Track() {
-  const { bind, str } = useForm();
-  const [err, setErr] = useState('');
-
-  const submit = async () => {
-    let o = get<Order[]>('orders', []).find((x) => x.id.toLowerCase() === str('tkid').trim().toLowerCase() && x.email.toLowerCase() === str('tkemail').trim().toLowerCase());
-    if (!o && remote) {
-      o = (await fetchOrder(str('tkid'), str('tkemail'))) ?? undefined;
-      if (o) setLocal('orders', get<Order[]>('orders', []).filter((x) => x.id !== o!.id).concat(o));
-    }
-    if (!o) return setErr('We could not find that order. Check the number and email.');
-    const mine = get<string[]>('myorders', []);
-    if (!mine.includes(o.id)) set('myorders', mine.concat(o.id));
-    go('order/' + o.id);
-  };
-
-  return (
-    <section className="narrow" style={{ maxWidth: 480 }}>
-      <form className="card stack" style={{ gap: 16 }} onSubmit={(e) => e.preventDefault()} noValidate>
-        <h1 className="h1">Track Your Order</h1>
-        <p className="muted" style={{ margin: 0 }}>Enter the order number from your confirmation email, for example EE-1004.</p>
-        <div className="fields one">
-          <Field label="Order number" {...bind('tkid')} placeholder="EE-1004" />
-          <Field label="Email" type="email" {...bind('tkemail')} />
-        </div>
-        <ErrorText>{err}</ErrorText>
-        <button type="submit" className="btn" onClick={submit}>Track Order</button>
-      </form>
-    </section>
-  );
-}
 
 export function NotFound() {
   return (

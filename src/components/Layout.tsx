@@ -63,6 +63,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </NavDropdown>
             {liveSeasons.map((x) => <a key={x.id} href={'#/shop?season=' + x.id} style={{ color: '#F2C9A0' }} {...(onShop && !seasonalMode && r.q.season === x.id ? { className: 'on', 'aria-current': 'page' as const } : {})}>{x.name.replace(' Collection', '')}</a>)}
             <a href="#/gifts" {...here('gifts')}>Gift Box</a>
+            <a href="#/track" {...here('track')}>Track Order</a>
             <a href="#/about" {...here('about')}>About</a>
             <a href="#/contact" {...here('contact')}>Contact</a>
           </nav>
