@@ -7,7 +7,7 @@ import { CartDrawer } from './CartDrawer';
 import { QuickViewModal } from './QuickViewModal';
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { settings, cart, wish, user, setCartOpen, toast, flash, cookieAccepted, acceptCookie } = useApp();
+  const { settings, categories, liveSeasons, cart, wish, user, setCartOpen, toast, flash, cookieAccepted, acceptCookie } = useApp();
   const [hq, setHq] = useState('');
   const [nl, setNl] = useState('');
   const cartCount = cart.reduce((a, x) => a + x.qty, 0);
@@ -24,7 +24,7 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <>
       <div className="shell">
-        <div className="topbar">Free UK delivery over {money(settings.freeOver)} · Hand-poured in small batches</div>
+        <div className="topbar">Free delivery over {money(settings.freeOver)} · Hand-poured soy wax candles, made in Sri Lanka</div>
         <header className="header">
           <a href="#/" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <img src="/logo.png" alt="Ember & Eve" width={40} height={40} style={{ borderRadius: 9999 }} />
@@ -32,8 +32,9 @@ export function Layout({ children }: { children: ReactNode }) {
           </a>
           <nav className="nav" aria-label="Main">
             <a href="#/shop">Shop</a>
-            <a href="#/gifts">Gift Sets</a>
-            <a href="#/finder">Scent Finder</a>
+            {categories.map((c) => <a key={c.id} href={'#/shop?cat=' + c.id}>{c.name.replace(' Candles', '')}</a>)}
+            {liveSeasons.map((x) => <a key={x.id} href={'#/shop?season=' + x.id} style={{ color: '#F2C9A0' }}>{x.name.replace(' Collection', '')}</a>)}
+            <a href="#/gifts">Gift Box</a>
             <a href="#/about">About</a>
             <a href="#/contact">Contact</a>
           </nav>
@@ -55,12 +56,12 @@ export function Layout({ children }: { children: ReactNode }) {
               <div style={{ fontFamily: 'var(--serif)', fontSize: 20, color: '#fff' }}>Ember &amp; Eve</div>
               <div>Light up your little moments.</div>
             </div>
-            <FooterCol title="Shop" links={[['All Candles', '/shop'], ['Gift Sets', '/gifts'], ['Scent Finder', '/finder']]} />
+            <FooterCol title="Shop" links={[['All Candles', '/shop'], ['Gift Box', '/gifts'], ['Colour Finder', '/finder']]} />
             <FooterCol title="Help" links={[['FAQ', '/faq'], ['Shipping and Returns', '/shipping'], ['Candle Care', '/care'], ['Track Order', '/track'], ['Contact', '/contact']]} />
             <FooterCol title="Company" links={[['About', '/about'], ['Privacy Policy', '/privacy'], ['Terms', '/terms'], ['Staff Login', '/admin']]} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ color: '#fff', fontWeight: 600 }}>Newsletter</div>
-              <div>New scents and offers, once a month.</div>
+              <div>New collections and offers, once a month.</div>
               <form onSubmit={doNews} style={{ display: 'flex', gap: 8, margin: 0 }}>
                 <input name="nl" value={nl} onChange={(e) => setNl(e.target.value)} placeholder="Email" aria-label="Email for newsletter" style={{ flex: 1, minWidth: 0, padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.08)', color: '#fff', fontSize: 14 }} />
                 <button type="submit" style={{ font: '600 14px Inter', padding: '8px 16px', borderRadius: 8, border: 'none', background: '#A67C52', color: '#1B1D1F', cursor: 'pointer' }}>Join</button>

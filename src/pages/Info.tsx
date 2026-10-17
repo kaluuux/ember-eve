@@ -21,7 +21,7 @@ export function About() {
           <div>
             <h1 className="h1" style={{ marginBottom: 16 }}>About Ember &amp; Eve</h1>
             <p style={{ fontSize: 16, lineHeight: '24px', color: 'var(--text2)', margin: '0 0 12px' }}>Light up your little moments. Every candle is poured by hand in small batches, then left to cure before it is wrapped for you.</p>
-            <p style={{ fontSize: 16, lineHeight: '24px', color: 'var(--text2)', margin: 0 }}>We make five shapes and five scents, and we keep the range small so each one is done well. Replace this text with your own story.</p>
+            <p style={{ fontSize: 16, lineHeight: '24px', color: 'var(--text2)', margin: 0 }}>We pour every candle by hand in Sri Lanka, using high quality soy wax that is non-toxic and gentle on your home. Replace this text with your own story.</p>
           </div>
           <Ph tint="#EADFD3" label="the maker at work" ratio="4/3" style={{ borderRadius: 16, border: '1px solid var(--line)' }} />
         </div>
@@ -86,7 +86,7 @@ const FAQS = [
   { q: 'How long do the candles burn?', a: 'Burn time depends on size, from around 16 hours for an 80g butterfly to 60 hours for a 300g jar.' },
   { q: 'What wax do you use?', a: 'Soy wax, or a coconut-soy blend. You can choose on each product page.' },
   { q: 'Can I send a candle as a gift?', a: 'Yes. Add a gift message at checkout, choose gift wrap, or build a three-candle gift set.' },
-  { q: 'Do you deliver outside the UK?', a: 'Not yet. We currently deliver within the United Kingdom.' },
+  { q: 'Where do you deliver?', a: 'We deliver across Sri Lanka, and you can also collect from our store.' },
   { q: 'Can I change or cancel my order?', a: 'Contact us within 2 hours of ordering and we will update it before it is poured and packed.' },
   { q: 'Are the candles safe for pets?', a: 'We use phthalate-free fragrance oils, but keep all candles and flames out of reach of pets.' },
 ];

@@ -1,14 +1,20 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { CartLine, Discount, Product, Review, Session, Settings, User } from './types';
-import { DEFAULT_SETTINGS, EMPTY, WAX, get, scentOf, set, useStored } from './store';
-import { computeTotals, type Totals } from './commerce';
+import type { CartLine, Category, Color, Discount, Order, Product, Review, Season, Session, Settings, User } from './types';
+import { DEFAULT_SETTINGS, EMPTY, get, set, useStored } from './store';
+import { computeTotals, describe, normalize, selectionTint, shelfProducts, unitPrice, visibleProducts, blendValid, type Selection, type Shelf, type Totals } from './commerce';
 import { go } from './router';
 
-export interface QuickView { id: number; scent: string; si: number; wi: number; qty: number }
+export interface QuickView { id: number; sel: Selection }
 
 interface Ctx {
   products: Product[];
+  /** Products a customer can see right now (active, season open) */
   active: Product[];
+  colors: Color[];
+  categories: Category[];
+  seasons: Season[];
+  liveSeasons: Season[];
+  shelf: (kind: Shelf) => Product[];
   settings: Settings;
   reviews: Review[];
   cart: CartLine[];
@@ -24,7 +30,7 @@ interface Ctx {
   setCartOpen: (v: boolean) => void;
   qv: QuickView | null;
   setQv: (q: QuickView | null | ((q: QuickView | null) => QuickView | null)) => void;
-  addCandle: (pid: number, scent: string, si: number, wi: number, qty: number) => boolean;
+  addCandle: (pid: number, sel: Selection) => boolean;
   addLine: (line: CartLine) => void;
   setQty: (key: string, delta: number) => void;
   clearCart: () => void;
@@ -46,6 +52,10 @@ const NO_SESSION: Session | null = null;
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const products = useStored<Product[]>('products', EMPTY);
+  const colors = useStored<Color[]>('colors', EMPTY);
+  const categories = useStored<Category[]>('categories', EMPTY);
+  const seasons = useStored<Season[]>('seasons', EMPTY);
+  const orders = useStored<Order[]>('orders', EMPTY);
   const settings = useStored<Settings>('settings', DEFAULT_SETTINGS);
   const reviewsAll = useStored<Review[]>('reviews', EMPTY);
   const discounts = useStored<Discount[]>('discounts', EMPTY);
@@ -66,7 +76,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     timer.current = window.setTimeout(() => setToast(''), 2000);
   }, []);
 
-  const active = useMemo(() => products.filter((p) => p.active), [products]);
+  const active = useMemo(() => visibleProducts(products, seasons), [products, seasons]);
+  const liveSeasons = useMemo(() => seasons.filter((x) => active.some((p) => p.season === x.id)), [seasons, active]);
+  const shelf = useCallback((kind: Shelf) => shelfProducts(kind, active, orders), [active, orders]);
   const reviews = useMemo(() => reviewsAll.filter((r) => r.approved), [reviewsAll]);
   const discObj = useMemo(() => discounts.find((d) => d.active && d.code === disc), [discounts, disc]);
   const totals = useMemo(() => computeTotals(cart, discObj, settings), [cart, discObj, settings]);
@@ -79,22 +91,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     set('cart', c);
   }, []);
 
-  const addCandle: Ctx['addCandle'] = useCallback((pid, scent, si, wi, qty) => {
+  const addCandle: Ctx['addCandle'] = useCallback((pid, raw) => {
     const p = get<Product[]>('products', []).find((x) => x.id === pid);
-    const z = p?.sizes[si];
-    if (!p || !z) return false;
-    if (z.stock <= 0) { flash('Sold out'); return false; }
-    const w = WAX[wi];
-    const key = [pid, scent, si, wi].join('-');
+    if (!p) return false;
+    const palette = get<Color[]>('colors', []);
+    const st = get<Settings>('settings', DEFAULT_SETTINGS);
+    const sel = normalize(p, raw, palette);
+    if (!blendValid(sel)) { flash('Pick at least 2 colours for a custom blend'); return false; }
+    const key = [pid, JSON.stringify(sel.opts), sel.color, sel.blend.join('+')].join('|');
     const cur = get<CartLine[]>('cart', []).slice();
     const i = cur.findIndex((x) => x.key === key);
-    const have = cur.filter((x) => x.pid === pid && x.si === si).reduce((a, x) => a + x.qty, 0);
-    const n = Math.min(qty, z.stock - have);
-    if (n <= 0) { flash('Only ' + z.stock + ' in stock'); return false; }
+    const have = cur.filter((x) => x.pid === pid).reduce((a, x) => a + x.qty, 0);
+    const room = p.stock === null ? 10 : p.stock - have;
+    const n = Math.min(sel.qty, room);
+    if (n <= 0) { flash(p.stock === 0 ? 'Sold out' : 'Only ' + p.stock + ' in stock'); return false; }
     if (i >= 0) cur[i] = { ...cur[i], qty: cur[i].qty + n };
-    else cur.push({ key, pid, si, wi, scent, name: p.name + ', ' + scent, sub: z.l + ' · ' + w.l, unit: z.p + w.add, tint: scentOf(scent).tint, qty: n });
+    else cur.push({ key, pid, name: p.name, sub: describe(p, sel, palette), unit: unitPrice(p, sel, st), tint: selectionTint(sel, palette), qty: n });
     set('cart', cur);
-    flash(n < qty ? 'Added ' + n + ' (stock limit)' : 'Added to basket');
+    flash(n < sel.qty ? 'Added ' + n + ' (stock limit)' : 'Added to basket');
     return true;
   }, [flash]);
 
@@ -103,12 +117,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const i = cur.findIndex((x) => x.key === key);
     if (i < 0) return;
     const l = cur[i];
-    const prods = get<Product[]>('products', []);
-    const others = cur.filter((x, j) => j !== i && x.pid === l.pid && x.si === l.si).reduce((a, x) => a + x.qty, 0);
-    const stock = l.pid ? prods.find((p) => p.id === l.pid)?.sizes[l.si]?.stock ?? 0 : 10;
-    const max = l.pid ? stock - others : 10;
+    const others = cur.filter((x, j) => j !== i && x.pid === l.pid).reduce((a, x) => a + x.qty, 0);
+    const stock = l.pid ? get<Product[]>('products', []).find((p) => p.id === l.pid)?.stock : null;
+    const max = l.pid && stock !== null && stock !== undefined ? stock - others : 10;
     let q = l.qty + d;
-    if (q > max) { flash('Only ' + max + ' in stock'); q = max; }
+    if (q > max) { flash('Only ' + max + ' available'); q = max; }
     if (q <= 0) cur.splice(i, 1); else cur[i] = { ...l, qty: q };
     set('cart', cur);
   }, [flash]);
@@ -125,7 +138,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const acceptCookie = useCallback(() => set('cookie', true), []);
 
   const value: Ctx = {
-    products, active, settings, reviews, cart, wish, user, disc, setDisc, discObj, totals, toast, flash, cartOpen, setCartOpen,
+    products, active, colors, categories, seasons, liveSeasons, shelf, settings, reviews, cart, wish, user, disc, setDisc, discObj, totals, toast, flash, cartOpen, setCartOpen,
     qv, setQv, addCandle, addLine, setQty, clearCart, toggleWish, signIn, signOut, cookieAccepted, acceptCookie,
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;

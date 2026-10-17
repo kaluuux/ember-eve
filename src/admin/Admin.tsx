@@ -3,15 +3,16 @@ import { EMPTY, get, set, useStored } from '../store';
 import { ErrorText, Field, useForm } from '../components/ui';
 import { go, type Route } from '../router';
 import type { Message, Order, Review } from '../types';
-import { Customers, Dashboard, Discounts, Messages, OrdersView, ProductsView, ReviewsView, SettingsView } from './views';
+import { Customers, Dashboard, Discounts, Messages, OrdersView, ReviewsView, SettingsView } from './views';
+import { CatalogView, ProductsView } from './catalog';
 
 interface AdminSession { email: string }
 const NO_ADMIN: AdminSession | null = null;
 export const ADMIN_EMAIL = 'admin@emberandeve.example';
 
-const VIEWS = ['dash', 'orders', 'products', 'customers', 'discounts', 'reviews', 'messages', 'settings'] as const;
+const VIEWS = ['dash', 'orders', 'products', 'catalog', 'customers', 'discounts', 'reviews', 'messages', 'settings'] as const;
 type View = (typeof VIEWS)[number];
-const LABELS: Record<View, string> = { dash: 'Dashboard', orders: 'Orders', products: 'Products', customers: 'Customers', discounts: 'Discounts', reviews: 'Reviews', messages: 'Messages', settings: 'Settings' };
+const LABELS: Record<View, string> = { dash: 'Dashboard', orders: 'Orders', products: 'Products', catalog: 'Catalogue setup', customers: 'Customers', discounts: 'Discounts', reviews: 'Reviews', messages: 'Messages', settings: 'Settings' };
 
 export function Admin({ route }: { route: Route }) {
   const admin = useStored<AdminSession | null>('admin', NO_ADMIN);
@@ -54,6 +55,7 @@ export function Admin({ route }: { route: Route }) {
         {view === 'dash' && <Dashboard />}
         {view === 'orders' && <OrdersView sel={route.q.sel || ''} flash={flash} />}
         {view === 'products' && <ProductsView flash={flash} />}
+        {view === 'catalog' && <CatalogView flash={flash} />}
         {view === 'customers' && <Customers />}
         {view === 'discounts' && <Discounts flash={flash} />}
         {view === 'reviews' && <ReviewsView />}

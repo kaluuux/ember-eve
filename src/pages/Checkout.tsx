@@ -50,7 +50,7 @@ export function Checkout() {
     const order: Order = {
       id, date: iso, email: str('email'), name: str('first') + ' ' + str('last'), first: str('first'), phone: str('phone'),
       address: { a1: str('a1'), a2: str('a2'), city: str('city'), post: str('post') },
-      items: cart.map((l) => ({ name: l.name, sub: l.sub, qty: l.qty, unit: l.unit, tint: l.tint, pid: l.pid, si: l.si })),
+      items: cart.map((l) => ({ name: l.name, sub: l.sub, qty: l.qty, unit: l.unit, tint: l.tint, pid: l.pid })),
       sub: T.sub, disc: T.disc, code: disc, ship: T.ship, shipM, wrap: T.wrap, total: T.total, status: 'Processing',
       pay: pay === 'card' ? 'Card ending ' + digits.slice(-4) : 'PayPal', note: str('gnote'), userId: user ? user.id : null, log: [{ s: 'Placed', d: iso }],
     };
@@ -58,7 +58,7 @@ export function Checkout() {
     cart.forEach((l) => {
       if (!l.pid) return;
       const p = products.find((x) => x.id === l.pid);
-      if (p?.sizes[l.si]) p.sizes[l.si].stock = Math.max(0, p.sizes[l.si].stock - l.qty);
+      if (p && p.stock !== null) p.stock = Math.max(0, p.stock - l.qty);
     });
     set('products', products);
     set('orders', orders.concat(order));

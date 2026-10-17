@@ -1,17 +1,36 @@
-export interface Scent { n: string; f: string; tint: string; note: string }
-export interface Wax { l: string; add: number }
-export interface Size { l: string; p: number; burn: string; stock: number }
+export interface Color { id: string; name: string; hex: string }
+export interface Category { id: string; name: string; blurb: string }
+/** A choice inside an option group. `colors` restricts the colours offered when this choice is picked (e.g. brown jar: white only). */
+export interface Opt { id: string; label: string; add: number; colors?: string[] }
+export interface Group { id: string; label: string; options: Opt[] }
+export type Pin = 'best' | 'trending' | 'new';
+/** A seasonal collection that is shown on the storefront only inside its date window (MM-DD, may wrap the year end). */
+export interface Season { id: string; name: string; from: string; to: string; force: '' | 'on' | 'off'; blurb: string }
 
 export interface Product {
   id: number;
   name: string;
-  shape: string;
+  /** Category id */
+  cat: string;
   blurb: string;
   desc: string;
-  sizes: Size[];
-  scents: string[];
+  base: number;
+  groups: Group[];
+  /** Offers the colour palette */
+  colors: boolean;
+  /** Offers a custom blend of 2+ palette colours */
+  custom: boolean;
+  /** null = made to order (no stock limit) */
+  stock: number | null;
+  /** Percentage off, 0 = not on sale */
+  salePct: number;
+  /** Admin-pinned shelf badges, on top of the automatic ones */
+  pins: Pin[];
+  /** Season id, '' = year-round */
+  season: string;
   active: boolean;
   featured: boolean;
+  created: string;
 }
 
 export interface Discount {
@@ -30,6 +49,10 @@ export interface Settings {
   express: number;
   freeOver: number;
   giftWrap: number;
+  /** Colours in a custom blend that are free; each extra costs `extraColorFee` */
+  freeColors: number;
+  extraColorFee: number;
+  giftBoxFee: number;
 }
 
 export interface Address { first?: string; last?: string; phone?: string; a1?: string; a2?: string; city?: string; post?: string }
@@ -39,11 +62,8 @@ export interface Session { id: number; name: string; email: string }
 
 export interface CartLine {
   key: string;
-  /** 0 for gift sets */
+  /** 0 for gift boxes */
   pid: number;
-  si: number;
-  wi?: number;
-  scent?: string;
   name: string;
   sub: string;
   unit: number;
@@ -51,7 +71,7 @@ export interface CartLine {
   qty: number;
 }
 
-export interface OrderItem { name: string; sub: string; qty: number; unit: number; tint: string; pid: number; si: number }
+export interface OrderItem { name: string; sub: string; qty: number; unit: number; tint: string; pid: number }
 export type OrderStatus = 'Processing' | 'Dispatched' | 'Delivered' | 'Cancelled';
 
 export interface Order {

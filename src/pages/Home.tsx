@@ -3,11 +3,13 @@ import { ProductCard } from '../components/ProductCard';
 import { useApp } from '../AppContext';
 import { Ph } from '../components/ui';
 import { money } from '../store';
+import { SHELVES } from '../commerce';
+import type { Product } from '../types';
 
 export const INGREDIENTS = [
-  { v: '82/18', t: 'Soy and coconut wax', d: 'A creamy blend that holds scent and burns evenly. Choose pure soy or the blend on any candle.' },
+  { v: '100%', t: 'High quality soy wax', d: 'Non-toxic, clean burning and gentle on your home. Every candle is poured by hand with care and attention to detail.' },
+  { v: '15+', t: 'Colours, or blend your own', d: 'Pick from fifteen shades, or mix two or more for a colour that is yours alone.' },
   { v: '100%', t: 'Cotton wicks', d: 'Lead-free and sized to each shape for a full, even melt.' },
-  { v: '5', t: 'Gentle scents', d: 'Vanilla, Strawberry, Jasmine, Lavender and Rosemary, blended in small lots.' },
 ];
 
 const GALLERY = [
@@ -38,13 +40,32 @@ export function WhatsInside() {
   );
 }
 
+/** A titled row of up to four products. Renders nothing when there is nothing to show, so empty shelves never appear. */
+function ShelfSection({ title, blurb, href, items, tinted }: { title: string; blurb: string; href: string; items: Product[]; tinted?: boolean }) {
+  if (!items.length) return null;
+  return (
+    <section className={tinted ? 'band-white' : undefined}>
+      <div className="page">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap', marginBottom: 32 }}>
+          <div>
+            <h2 className="h2">{title}</h2>
+            <p className="muted" style={{ margin: '4px 0 0' }}>{blurb}</p>
+          </div>
+          <a href={'#/' + href} className="btn ghost">View All{items.length > 4 ? ' (' + items.length + ')' : ''}</a>
+        </div>
+        <div className="pgrid shelf">{items.slice(0, 4).map((p) => <ProductCard key={p.id} p={p} />)}</div>
+      </div>
+    </section>
+  );
+}
+
 export function Home() {
-  const { active, settings, reviews } = useApp();
+  const { settings, reviews, categories, liveSeasons, active, shelf } = useApp();
   const trust = [
-    { h: 'Free delivery', t: 'On UK orders over ' + money(settings.freeOver) },
+    { h: 'Free delivery', t: 'On orders over ' + money(settings.freeOver) },
     { h: 'Hand-poured', t: 'Small batches, cured for 14 days' },
-    { h: '30-day returns', t: 'Full refund on unused candles' },
-    { h: 'Secure checkout', t: 'Card and PayPal accepted' },
+    { h: 'Soy wax, non-toxic', t: 'Poured by hand, with care' },
+    { h: 'Made in Sri Lanka', t: 'Pickup, bank transfer or card' },
   ];
   return (
     <>
@@ -61,16 +82,30 @@ export function Home() {
         </div>
       </section>
 
+      {liveSeasons.map((se) => (
+        <ShelfSection key={se.id} title={se.name} blurb={se.blurb} href={'shop?season=' + se.id} items={active.filter((p) => p.season === se.id)} tinted />
+      ))}
+
       <section className="page">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap', marginBottom: 32 }}>
-          <div>
-            <h2 className="h2">Five Shapes, Five Scents</h2>
-            <p className="muted" style={{ margin: '4px 0 0' }}>Choose a shape, then choose a scent.</p>
-          </div>
-          <a href="#/shop" className="btn ghost">View All</a>
+        <h2 className="h2" style={{ marginBottom: 24 }}>Shop by Type</h2>
+        <div className="cat-tiles">
+          {categories.map((c, i) => {
+            const n = active.filter((p) => p.cat === c.id).length;
+            return (
+              <a key={c.id} href={'#/shop?cat=' + c.id} className="card" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column', gap: 12, padding: 16 }}>
+                <Ph tint={['#FCE7F3', '#E0E7FF', '#FEF3C7', '#DCFCE7'][i % 4]} label={c.name} ratio="3/2" style={{ borderRadius: 8 }} />
+                <div style={{ padding: '0 4px 4px' }}>
+                  <div style={{ fontSize: 18, fontWeight: 500 }}>{c.name}</div>
+                  <div className="muted" style={{ fontSize: 14, margin: '4px 0' }}>{c.blurb}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--brown)' }}>{n} {n === 1 ? 'candle' : 'candles'}</div>
+                </div>
+              </a>
+            );
+          })}
         </div>
-        <div className="pgrid five">{active.slice(0, 5).map((p) => <ProductCard key={p.id} p={p} />)}</div>
       </section>
+
+      {SHELVES.map((sh) => <ShelfSection key={sh.id} title={sh.title} blurb={sh.blurb} href={'shop?shelf=' + sh.id} items={shelf(sh.id)} />)}
 
       <section className="band-dark">
         <div style={{ maxWidth: 1120, margin: '0 auto', padding: '48px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
