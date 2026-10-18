@@ -89,7 +89,7 @@ export function Gifts() {
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--brown)' }}>{t('Candle')}{' '}{i + 1}</div>
               <div style={{ fontSize: 14, fontWeight: 600 }}>{money(r.unit)}</div>
             </div>
-            <div className="ph ph-art" style={{ backgroundColor: selectionTint(r.sel, colors), aspectRatio: '3/2', borderRadius: 14 }}>{r.p?.name}</div>
+            <div className="ph ph-art gift-slot-art" style={{ backgroundColor: selectionTint(r.sel, colors), aspectRatio: '3/2', borderRadius: 14 }}>{r.p?.name}</div>
             <select
               aria-label={'Candle ' + (i + 1)}
               value={r.s.pid}

@@ -1,0 +1,142 @@
+/* ==========================================================================
+ * Phones and small tablets. Loaded last, so it can tidy up anything above.
+ * ========================================================================== */
+
+/* ---------------------------------------------------------------- home hero (all sizes) */
+.hero-stage { position: sticky; top: var(--hdr-h, 64px); height: calc(100vh - var(--hdr-h, 64px)); height: calc(100dvh - var(--hdr-h, 64px)); min-height: 560px; overflow: hidden; display: flex; align-items: center; }
+.hero-grid { max-width: var(--wrap); width: 100%; margin: 0 auto; padding: 0 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 32px; align-items: center; position: relative; }
+.hero-art { position: relative; justify-self: center; height: min(68vh, 560px); aspect-ratio: 520 / 600; max-width: 100%; }
+
+/* ---------------------------------------------------------------- phone menu */
+.burger, .mm-scrim, .mmenu { display: none; }
+.burger { width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--line); background: #fff; align-items: center; justify-content: center; cursor: pointer; padding: 0; flex: none; }
+.burger span, .burger span::before, .burger span::after { display: block; width: 18px; height: 2px; background: var(--ink); border-radius: 2px; position: relative; transition: transform 0.25s var(--ease), top 0.25s var(--ease), background 0.2s; }
+.burger span::before, .burger span::after { content: ''; position: absolute; left: 0; }
+.burger span::before { top: -6px; }
+.burger span::after { top: 6px; }
+.header.menu-open .burger span { background: transparent; }
+.header.menu-open .burger span::before { top: 0; transform: rotate(45deg); }
+.header.menu-open .burger span::after { top: 0; transform: rotate(-45deg); }
+@keyframes mmFade { from { opacity: 0; } to { opacity: 1; } }
+
+@media (max-width: 760px) {
+  .header { grid-template-columns: minmax(0, 1fr) auto !important; grid-template-areas: 'brand actions' !important; padding: 8px 14px !important; column-gap: 10px; row-gap: 0; }
+  .header .nav { display: none !important; }
+  .header .search, .hdr-actions .hide-sm, .hdr-user { display: none !important; }
+  .hdr-actions { gap: 10px; }
+  .hdr-actions .basket-btn { padding: 10px 14px; font-size: 14px; }
+  .burger { display: inline-flex; }
+  .header .brand span { font-size: 21px; }
+  .header .brand img { width: 34px; height: 34px; }
+  .topbar { font-size: 11px; padding: 6px 12px; letter-spacing: 0.02em; }
+
+  .header .mm-scrim { display: block; position: absolute; left: 0; right: 0; top: 100%; height: 100vh; height: 100dvh; background: rgba(36, 24, 12, 0.38); z-index: 30; animation: mmFade 0.2s both; }
+  .header .mmenu { display: flex; flex-direction: column; position: absolute; left: 0; right: 0; top: 100%; z-index: 31; background: var(--bg, #fbf8f3); border-bottom: 1px solid var(--line); box-shadow: 0 26px 40px -22px rgba(70, 45, 20, 0.4); padding: 10px 16px 18px; max-height: calc(100vh - var(--hdr-h, 56px) - 10px); max-height: calc(100dvh - var(--hdr-h, 56px) - 10px); overflow-y: auto; animation: fadeDown 0.22s var(--ease) both; }
+  .header .mmenu a { display: block; padding: 13px 4px; font-size: 16px; font-weight: 500; border-bottom: 1px solid var(--line); color: var(--ink); text-decoration: none; }
+  .header .mmenu a.on { color: var(--brown-d); }
+  .header .mmenu a.season-link { color: var(--brown); }
+  .mm-label { padding: 14px 4px 2px; font: 600 11px Inter, sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted2); }
+  .mm-sub { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+  .header .mmenu .mm-sub a { font-size: 15px; font-weight: 400; padding: 10px 4px 10px 10px; }
+  .header .mmenu form { margin: 0 0 4px; }
+  .header .mmenu .search { display: block !important; width: 100%; box-sizing: border-box; font-size: 16px; padding: 12px 16px; }
+  .mm-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .header .mmenu .mm-row a { border: 1px solid var(--line); border-radius: 12px; text-align: center; background: #fff; padding: 12px 8px; font-size: 15px; }
+  .mm-lang { margin-top: 14px; justify-content: center; }
+}
+
+/* ---------------------------------------------------------------- home hero on phones */
+@media (max-width: 760px) {
+  .hero-stage { min-height: 0; }
+  .hero-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; height: 100%; padding: 14px 20px 8px; gap: 10px; align-content: center; align-items: start; }
+  .hero-eyebrow { font-size: 10.5px; letter-spacing: 0.16em; }
+  .hero-title { font-size: clamp(27px, 8.2vw, 38px); margin: 8px 0 10px; line-height: 1.08; }
+  html[lang='si'] .hero-title, html[lang='ta'] .hero-title { font-size: clamp(22px, 6.6vw, 30px); line-height: 1.28; }
+  .hero-p { font-size: 15px !important; line-height: 22px !important; margin: 0 0 14px !important; }
+  .hero-ctas { flex-wrap: nowrap !important; gap: 8px !important; }
+  .hero-ctas .hero-cta { flex: 1; text-align: center; padding: 12px 8px; font-size: 14px; white-space: nowrap; }
+  .hero-steps { display: none !important; }
+  [data-hint] { margin-top: 10px !important; font-size: 12px !important; }
+  .hero-art { height: auto; width: 100%; max-width: 440px; justify-self: center; }
+}
+@media (max-width: 760px) and (max-height: 760px) { .hero-p { display: none !important; } }
+
+/* ---------------------------------------------------------------- shop filters fold away */
+.filters-toggle { display: none; }
+@media (max-width: 820px) {
+  .filters-toggle { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin: 0 0 12px; padding: 11px 16px; border-radius: 12px; border: 1px solid var(--sand); background: #fff; font: 600 14px Inter, sans-serif; color: var(--ink); cursor: pointer; }
+  .filters-panel { display: none; }
+  .filters-panel.open { display: flex; }
+}
+
+/* ---------------------------------------------------------------- compact product cards */
+@media (max-width: 720px) {
+  .pgrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px; }
+  .pcard { padding: 8px; gap: 8px; border-radius: 16px; }
+  .pcard:hover { transform: none; }
+  .thumb-wrap { border-radius: 12px; }
+  .pcard .thumb { aspect-ratio: 1 / 1.02; }
+  .pcard .name { font-size: 17px; line-height: 1.15; }
+  .pc-info { gap: 3px !important; padding: 0 2px !important; }
+  .pc-cat, .pc-blurb, .pc-more { display: none; }
+  .pc-rate { font-size: 11px !important; }
+  .swatch-dots { padding: 0 2px; gap: 4px; }
+  .swatch-dots .swatch { width: 14px; height: 14px; }
+  .swatch-dots .swatch:nth-child(n + 7) { display: none; }
+  .pcard .foot { padding: 0 2px 2px; gap: 8px; }
+  .pc-price { font-size: 14px !important; }
+  .pc-price s { display: block; margin: 0 !important; }
+  .pcard .foot .btn { padding: 9px 8px !important; font-size: 13px !important; }
+  .pcard .heart { width: 30px; height: 30px; top: 6px; right: 6px; }
+  .pcard .heart svg { width: 15px; height: 15px; }
+  .pcard .badge-row { font-size: 10px; gap: 4px; }
+  .pcard .thumb > span:last-child { font-size: 10px; }
+  /* home shelves: swipe sideways instead of a very tall column */
+  .pgrid.shelf { display: grid; grid-template-columns: none !important; grid-auto-flow: column; grid-auto-columns: minmax(158px, 46vw); overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 8px; margin-right: -18px; padding-right: 18px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .pgrid.shelf::-webkit-scrollbar { display: none; }
+  .pgrid.shelf > * { scroll-snap-align: start; }
+}
+
+/* ---------------------------------------------------------------- page rhythm */
+@media (max-width: 720px) {
+  .page, .page-72, .narrow { padding-top: 24px !important; padding-bottom: 40px !important; padding-left: 16px !important; padding-right: 16px !important; }
+  .h1 { font-size: clamp(28px, 8vw, 36px) !important; line-height: 1.12; }
+  .h2 { font-size: clamp(24px, 6.6vw, 30px) !important; }
+  .sec-head.center-head { margin-bottom: 22px; }
+  .promise-grid { padding: 22px 16px !important; gap: 16px !important; }
+  .studio-grid { padding: 44px 18px !important; gap: 26px !important; grid-template-columns: minmax(0, 1fr) !important; }
+  .story { padding: 48px 18px !important; gap: 26px !important; grid-template-columns: minmax(0, 1fr) !important; }
+  .gift-band .inner { padding: 44px 18px !important; }
+  .band-white .page, .band-dark .page { padding-top: 36px !important; padding-bottom: 36px !important; }
+  .layout-half { gap: 20px; }
+  .foot-main { grid-template-columns: 1fr 1fr !important; gap: 26px 16px !important; padding: 40px 18px 18px !important; }
+  .fbrand-col, .foot-main .fcol:last-child { grid-column: 1 / -1; }
+  .foot-base { padding: 16px 18px 24px !important; font-size: 12px; }
+}
+
+/* ---------------------------------------------------------------- product, gifts, cards on phones */
+@media (max-width: 720px) {
+  .gal-main { aspect-ratio: 1 / 0.86; max-height: 50vh; border-radius: 18px; }
+  .gal-thumbs { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .gal-thumbs button { border-radius: 10px; }
+  .gift-slot-art { aspect-ratio: 3 / 1 !important; }
+  .card { border-radius: 18px; }
+  .drawer { width: 100% !important; max-width: 100vw; }
+  .modal { max-height: calc(100dvh - 24px); overflow-y: auto; }
+}
+
+/* ---------------------------------------------------------------- admin on phones */
+@media (max-width: 860px) {
+  .admin-shell .admin-side { flex-wrap: nowrap !important; overflow-x: auto; position: sticky; top: 0; z-index: 25; padding: 8px 10px; scrollbar-width: none; }
+  .admin-shell .admin-side::-webkit-scrollbar { display: none; }
+  .admin-shell .admin-main { padding: 16px 14px 40px; max-width: 100%; }
+  .admin-shell .table { min-width: 560px; }
+  .admin-shell .table th, .admin-shell .table td { white-space: nowrap; padding: 10px; }
+  .admin-shell .kpi .k-value { font-size: 24px; white-space: nowrap; }
+  .admin-shell .detail { position: static; max-height: none; }
+}
+.footer .lang-switch button { color: #CDBFB1; }
+.footer .lang-switch button[aria-pressed='true'] { color: #fff; }
+@media (max-width: 860px) {
+  .admin-shell .orders-layout .table th:nth-child(3), .admin-shell .orders-layout .table td:nth-child(3) { display: none; }
+}

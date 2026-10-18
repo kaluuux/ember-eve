@@ -1,4 +1,5 @@
 :root {
+  --wrap: clamp(1120px, 82vw, 1560px);
   --bg: #FAF6F0;
   --ink: #26292B;
   --ink-deep: #1B1D1F;
@@ -42,8 +43,8 @@ button { color: inherit; }
 
 /* layout */
 .shell { font-family: Inter, sans-serif; color: var(--ink); background: var(--bg); min-height: 100vh; display: flex; flex-direction: column; }
-.page { max-width: 1120px; margin: 0 auto; padding: 48px 24px; }
-.page-72 { max-width: 1120px; margin: 0 auto; padding: 72px 24px; }
+.page { max-width: var(--wrap); margin: 0 auto; padding: 48px 24px; }
+.page-72 { max-width: var(--wrap); margin: 0 auto; padding: 72px 24px; }
 .narrow { margin: 0 auto; padding: 48px 24px; }
 .band-white { background: #fff; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .band-dark { background: var(--ink); color: #fff; }

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 
 const clamp01 = (a: number, b: number, x: number) => Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -28,6 +28,14 @@ function Flame({ at, dur }: { at: number; dur: number }) {
 export function Hero() {
   const t = useT();
   const ref = useRef<HTMLElement>(null);
+  // on a phone the scene is cropped to the candles so they fill the width
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches);
+  useEffect(() => {
+    const m = window.matchMedia('(max-width: 760px)');
+    const on = () => setPhone(m.matches);
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  }, []);
 
   useEffect(() => {
     const r = ref.current;
@@ -41,8 +49,10 @@ export function Hero() {
     const smalls = qa('[data-sfs]'), halos = qa('[data-sglow]');
 
     const onScroll = () => {
-      const total = r.offsetHeight - window.innerHeight;
-      const p = total > 0 ? clamp01(0, 1, -r.getBoundingClientRect().top / total) : 0;
+      const stage = r.firstElementChild as HTMLElement;
+      const off = parseFloat(getComputedStyle(stage).top) || 0;
+      const total = r.offsetHeight - stage.offsetHeight;
+      const p = total > 0 ? clamp01(0, 1, (off - r.getBoundingClientRect().top) / total) : 0;
       const ign = ease(clamp01(0.1, 0.28, p)), grow = ease(clamp01(0.28, 0.95, p)), em = clamp01(0.02, 0.1, p) * (1 - ign);
       const top = 372 + 60 * grow, fy = top - 22;
       const sv = [0.36, 0.46, 0.56, 0.66].map((s0) => ease(clamp01(s0, s0 + 0.08, p)));
@@ -58,7 +68,8 @@ export function Hero() {
       fpos.setAttribute('transform', `translate(260 ${fy})`); fpos.setAttribute('opacity', String(ign));
       fscale.setAttribute('transform', 'scale(' + (ign * 0.85 * (1 + 0.15 * grow)).toFixed(3) + ')');
       glow.style.opacity = String(ign * (0.55 + 0.45 * grow));
-      glow.style.top = ((fy - 35) / 600) * 100 + '%';
+      const vb = (r.querySelector('svg[data-scene]') as SVGSVGElement).viewBox.baseVal;
+      glow.style.top = ((fy - 35 - vb.y) / vb.height) * 100 + '%';
       glow.style.transform = 'scale(' + (0.2 + 0.9 * ign * (0.6 + 0.4 * grow)).toFixed(3) + ')';
       pool.setAttribute('opacity', String(ign * (0.5 + 0.5 * grow)));
       bar.style.width = p * 100 + '%';
@@ -78,34 +89,34 @@ export function Hero() {
 
   return (
     <section ref={ref} style={{ position: 'relative', height: '300vh', background: '#1B1D1F', color: '#fff' }}>
-      <div style={{ position: 'sticky', top: 0, height: '100vh', minHeight: 640, overflow: 'hidden', paddingTop: 64, display: 'flex', alignItems: 'center' }}>
-        <div style={{ position: 'absolute', left: 0, top: 64, height: 2, width: '100%', background: 'rgba(255,255,255,0.08)' }}>
+      <div className="hero-stage">
+        <div style={{ position: 'absolute', left: 0, top: 0, height: 2, width: '100%', background: 'rgba(255,255,255,0.08)', zIndex: 3 }}>
           <div data-bar style={{ height: 2, width: '0%', background: '#A67C52' }} />
         </div>
-        <div style={{ maxWidth: 1120, width: '100%', margin: '0 auto', padding: '0 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 32, alignItems: 'center', position: 'relative' }}>
-          <div style={{ position: 'relative', zIndex: 2 }}>
+        <div className="hero-grid">
+          <div className="hero-text" style={{ position: 'relative', zIndex: 2 }}>
             <div className="hero-eyebrow">{t('Light up your little moments')}</div>
             <h1 className="hero-title">{t('Light something that feels like home.')}</h1>
-            <p style={{ fontSize: 18, lineHeight: '28px', color: '#D9CCBF', margin: '0 0 28px', maxWidth: 480 }}>
+            <p className="hero-p" style={{ fontSize: 18, lineHeight: '28px', color: '#D9CCBF', margin: '0 0 28px', maxWidth: 480 }}>
               {t('Hand-poured soy wax candles in mold, glass and jar. Choose your colour, or blend your own, or build a gift box for someone you love.')}
             </p>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <div className="hero-ctas" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <a href="/shop" className="hero-cta solid">{t('Shop Candles')}</a>
               <a href="/finder" className="hero-cta line">{t('Find My Colour')}</a>
             </div>
-            <div style={{ display: 'flex', gap: 16, marginTop: 32, flexWrap: 'wrap', fontSize: 14, fontWeight: 500 }}>
+            <div className="hero-steps" style={{ display: 'flex', gap: 16, marginTop: 32, flexWrap: 'wrap', fontSize: 14, fontWeight: 500 }}>
               {['01 Unlit', '02 Jar ignites', '03 The collection', '04 Burn down'].map((s, i) => (
                 <span key={s} data-step style={{ color: i === 0 ? '#fff' : '#9AA0A3' }}>{t(s)}</span>
               ))}
             </div>
             <div data-hint style={{ marginTop: 16, fontSize: 14, color: '#CDBFB1' }}>{t('Scroll to light the candle')}</div>
           </div>
-          <div style={{ position: 'relative', justifySelf: 'center', height: 'min(68vh,560px)', aspectRatio: '520/600', maxWidth: '100%' }}>
+          <div className="hero-art" style={phone ? { aspectRatio: '460 / 410' } : undefined}>
             <div
               data-glow
               style={{ position: 'absolute', left: '50%', top: '50%', width: 1600, height: 1600, margin: '-800px 0 0 -800px', borderRadius: '50%', background: 'radial-gradient(circle,rgba(255,190,100,0.5) 0%,rgba(214,150,80,0.22) 22%,rgba(166,124,82,0) 55%)', opacity: 0, transform: 'scale(0.2)', pointerEvents: 'none' }}
             />
-            <svg viewBox="0 0 520 600" style={{ position: 'relative', width: '100%', height: '100%', overflow: 'visible' }} role="img" aria-label={t('Glass jar candle and shaped candles lighting as you scroll')}>
+            <svg data-scene viewBox={phone ? '30 190 460 410' : '0 0 520 600'} style={{ position: 'relative', width: '100%', height: '100%', overflow: 'visible' }} role="img" aria-label={t('Glass jar candle and shaped candles lighting as you scroll')}>
               <defs>
                 <linearGradient id="wx" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stopColor="#E2CDB0" /><stop offset="0.35" stopColor="#F6EBDA" /><stop offset="1" stopColor="#D2BA98" /></linearGradient>
                 <linearGradient id="fl" x1="0" x2="0" y1="1" y2="0"><stop offset="0" stopColor="#FF7A1F" /><stop offset="0.55" stopColor="#FFB54A" /><stop offset="1" stopColor="#FFE9A8" /></linearGradient>

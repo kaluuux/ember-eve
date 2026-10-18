@@ -42,7 +42,7 @@
 .admin-signout:hover { background: var(--a-side-2); }
 
 /* -------------------------------------------------------------------- main */
-.admin-main { flex: 1; min-width: 0; padding: 28px 32px 56px; max-width: 1280px; }
+.admin-main { flex: 1; min-width: 0; padding: 28px 32px 56px; max-width: 1720px; }
 .admin-shell .page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
 .admin-shell .h1 { font-family: Inter, sans-serif; font-size: 26px; line-height: 32px; font-weight: 700; letter-spacing: -0.01em; color: var(--a-ink); }
 .admin-shell .h3 { font-family: Inter, sans-serif; font-size: 16px; line-height: 24px; font-weight: 650; color: var(--a-ink); }

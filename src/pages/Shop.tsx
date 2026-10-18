@@ -24,6 +24,7 @@ export function Shop({ route }: { route: Route }) {
   const [sort, setSort] = useState<Sort>('feat');
   const [capPct, setCapPct] = useState(100);
   const [stockOnly, setStockOnly] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const top = useMemo(() => Math.max(100, ...active.map((p) => lowestPrice(p))), [active]);
   const step = top > 5000 ? 100 : 50;
@@ -68,8 +69,11 @@ export function Shop({ route }: { route: Route }) {
         </select>
       </div>
 
+      <button type="button" className="filters-toggle" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(!filtersOpen)}>
+        {t('Filters')}{(cat || shelfId || season || capPct < 100 || stockOnly) ? ' ·' : ''} <span aria-hidden="true">{filtersOpen ? '▴' : '▾'}</span>
+      </button>
       <div className="layout-shop">
-        <aside className="card stack" style={{ gap: 16 }}>
+        <aside className={'card stack filters-panel' + (filtersOpen ? ' open' : '')} style={{ gap: 16 }}>
           {route.q.q && <div style={{ fontSize: 14 }}>{t('Search:')}{' '}<b>{route.q.q}</b> <a href="/shop" style={{ marginLeft: 8, fontSize: 12 }}>{t('Clear')}</a></div>}
           <div>
             <div className="label-s">{t('Type')}</div>
