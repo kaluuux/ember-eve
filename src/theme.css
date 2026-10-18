@@ -398,7 +398,7 @@ html[lang='si'] .h1, html[lang='ta'] .h1 { line-height: 1.25; }
 .header .search { width: 132px; padding: 8px 14px; }
 .header .search:focus { width: 180px; }
 .nav-lang { display: none; flex: none; }
-@media (max-width: 1239px) {
+@media (max-width: 1279px) {
   .header { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'brand actions' 'nav nav'; }
 }
 html[lang='si'] .header .nav, html[lang='ta'] .header .nav { gap: 18px; font-size: 13.5px; }
@@ -426,9 +426,9 @@ html[lang='si'] .header .dd-btn, html[lang='ta'] .header .dd-btn { font-size: 13
  * Content grows with the window (1120px up to 1560px) instead of leaving wide empty margins.
  * The header lines up with the content edges. */
 @media (min-width: 1200px) {
-  .header { padding-left: max(28px, calc((100% - var(--wrap)) / 2 + 24px)); padding-right: max(28px, calc((100% - var(--wrap)) / 2 + 24px)); }
-  .topbar { padding-left: max(24px, calc((100% - var(--wrap)) / 2 + 24px)); padding-right: max(24px, calc((100% - var(--wrap)) / 2 + 24px)); }
-  .topbar-lang { right: max(16px, calc((100% - var(--wrap)) / 2 + 24px)); }
+  .header { padding-left: calc((100% - min(100%, var(--wrap) + 200px)) / 2 + 28px); padding-right: calc((100% - min(100%, var(--wrap) + 200px)) / 2 + 28px); }
+  .topbar { padding-left: calc((100% - min(100%, var(--wrap) + 200px)) / 2 + 28px); padding-right: calc((100% - min(100%, var(--wrap) + 200px)) / 2 + 28px); }
+  .topbar-lang { right: calc((100% - min(100%, var(--wrap) + 200px)) / 2 + 28px); }
 }
 .pgrid { grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); }
 @media (min-width: 1500px) { .pgrid.shelf { grid-template-columns: repeat(5, 1fr); } }

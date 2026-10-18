@@ -38,22 +38,22 @@ export function ProductCard({ p }: { p: Product }) {
         </a>
         <button type="button" className="heart" aria-pressed={saved} aria-label={saved ? t('Remove from saved') : 'Save ' + p.name} onClick={() => toggleWish(p.id)}><Ico n="heart" /></button>
       </div>
-      <div style={{ padding: '0 4px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {cat && <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--brown)' }}>{cat}</div>}
+      <div className="pc-info" style={{ padding: '0 4px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {cat && <div className="pc-cat" style={{ fontSize: 12, fontWeight: 600, color: 'var(--brown)' }}>{cat}</div>}
         <a href={href} className="name">{p.name}</a>
-        <div style={{ fontSize: 14, lineHeight: '22px', color: 'var(--muted)' }}>{p.blurb}</div>
-        <div style={{ fontSize: 12, color: 'var(--muted2)' }}>{rt.n ? rt.avg.toFixed(1) + ' / 5 (' + rt.n + ')' : t('No reviews yet')}</div>
+        <div className="pc-blurb" style={{ fontSize: 14, lineHeight: '22px', color: 'var(--muted)' }}>{p.blurb}</div>
+        <div className="pc-rate" style={{ fontSize: 12, color: 'var(--muted2)' }}>{rt.n ? rt.avg.toFixed(1) + ' / 5 (' + rt.n + ')' : t('No reviews yet')}</div>
       </div>
       {p.colors && (
         <div className="swatch-dots" aria-label={t('Colours')}>
           {colors.slice(0, DOTS).map((c) => (
             <button key={c.id} type="button" className={'swatch' + (c.id === cur ? ' on' : '')} style={{ background: c.hex }} aria-label={c.name} title={c.name} onClick={() => setColor(c.id)} />
           ))}
-          {colors.length > DOTS && <span style={{ fontSize: 12, color: 'var(--muted2)' }}>+{colors.length - DOTS}{p.custom ? t(' & custom') : ''}</span>}
+          {colors.length > DOTS && <span className="pc-more" style={{ fontSize: 12, color: 'var(--muted2)' }}>+{colors.length - DOTS}{p.custom ? t(' & custom') : ''}</span>}
         </div>
       )}
       <div className="foot">
-        <div style={{ fontSize: 16, fontWeight: 600 }}>
+        <div className="pc-price" style={{ fontSize: 16, fontWeight: 600 }}>
           {t('From')}{' '}{money(from)}{p.salePct > 0 && <s style={{ marginLeft: 8, fontSize: 13, fontWeight: 400, color: 'var(--muted2)' }}>{money(was)}</s>}
         </div>
         <div className="acts">

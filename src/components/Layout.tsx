@@ -49,6 +49,8 @@ export function Layout({ children }: { children: ReactNode }) {
   const [hq, setHq] = useState('');
   const [scrolled, setScrolled] = useState(false);
   const [bump, setBump] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
   const r = useCurrentRoute();
   const onShop = r.name === 'shop';
   const seasonalMode = onShop && r.q.seasonal === '1';
@@ -63,6 +65,29 @@ export function Layout({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('scroll', on);
   }, []);
 
+  // other parts of the page (the home hero) need to know how tall the sticky header is
+  useEffect(() => {
+    const h = headerRef.current;
+    if (!h) return;
+    const set = () => document.documentElement.style.setProperty('--hdr-h', Math.round(h.getBoundingClientRect().height) + 'px');
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(h, { box: 'border-box' });
+    return () => ro.disconnect();
+  }, []);
+
+  // the phone menu closes when you go somewhere, press Escape, or the window grows past phone size
+  const routeKey = r.name + '/' + r.arg + JSON.stringify(r.q);
+  useEffect(() => { setMenu(false); }, [routeKey]);
+  useEffect(() => {
+    if (!menu) return;
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(false); };
+    const grow = () => { if (window.innerWidth > 760) setMenu(false); };
+    document.addEventListener('keydown', esc);
+    window.addEventListener('resize', grow);
+    return () => { document.removeEventListener('keydown', esc); window.removeEventListener('resize', grow); };
+  }, [menu]);
+
   // the basket button gives a little nudge whenever something is added
   const prev = useRef(cartCount);
   useEffect(() => {
@@ -76,7 +101,7 @@ export function Layout({ children }: { children: ReactNode }) {
     <>
       <div className="shell">
         <div className="topbar">{t('Free delivery over {amount}', { amount: money(settings.freeOver) })}<span className="hide-sm"> · {t('Hand-poured soy wax candles, made in Sri Lanka')}</span><LangSwitch className="topbar-lang" /></div>
-        <header className={'header' + (scrolled ? ' scrolled' : '')}>
+        <header ref={headerRef} className={'header' + (scrolled ? ' scrolled' : '') + (menu ? ' menu-open' : '')}>
           <a href="/" className="brand">
             <img src="/logo.png" alt="" width={42} height={42} style={{ borderRadius: 9999 }} />
             <span>{t('Ember & Eve')}</span>
@@ -94,13 +119,44 @@ export function Layout({ children }: { children: ReactNode }) {
             <a href="/contact" {...here('contact')}>{t('Contact')}</a>
             <LangSwitch className="nav-lang" />
           </nav>
+          {menu && (
+            <>
+              <div className="mm-scrim" onClick={() => setMenu(false)} />
+              <div className="mmenu" id="mobile-menu" role="dialog" aria-label={t('Menu')}>
+                <form onSubmit={(e) => { doSearch(e); setMenu(false); }} role="search">
+                  <input className="search" name="mq" value={hq} onChange={(e) => setHq(e.target.value)} placeholder={t('Search candles')} aria-label={t('Search candles')} />
+                </form>
+                <a href="/shop" {...(onShop && !inCollection && !r.q.season ? { className: 'on' } : {})}>{t('Shop')}</a>
+                <div className="mm-label">{t('Our Collection')}</div>
+                <div className="mm-sub">
+                  {categories.map((c) => <a key={c.id} href={'/shop?cat=' + c.id}>{c.name}</a>)}
+                  {seasonal.length > 0 && <a href="/shop?seasonal=1">{t('Seasonal')}</a>}
+                  {liveSeasons.map((x) => <a key={x.id} href={'/shop?season=' + x.id} className="season-link">{x.name.replace(' Collection', '')}</a>)}
+                </div>
+                <a href="/gifts" {...here('gifts')}>{t('Gift Box')}</a>
+                {remote && settings.giftCardsOn && <a href="/gift-cards" {...here('gift-cards')}>{t('Gift Cards')}</a>}
+                <a href="/track" {...here('track')}>{t('Track Order')}</a>
+                <a href="/about" {...here('about')}>{t('About')}</a>
+                <a href="/contact" {...here('contact')}>{t('Contact')}</a>
+                <div className="mm-row">
+                  <a href={user ? '/account' : '/login'}>{user ? t('Hi,') + ' ' + user.name.split(' ')[0] : t('Sign In')}</a>
+                  <a href="/account?tab=wish">{t('Saved ·')}{' '}{wish.length}</a>
+                </div>
+                <LangSwitch className="mm-lang" />
+              </div>
+            </>
+          )}
           <div className="hdr-actions">
             <form onSubmit={doSearch} style={{ margin: 0 }} role="search">
               <input className="search" name="hq" value={hq} onChange={(e) => setHq(e.target.value)} placeholder={t('Search candles')} aria-label={t('Search candles')} />
             </form>
             <a href={user ? '/account' : '/login'} className="hdr-user">{user ? t('Hi,') + ' ' + user.name.split(' ')[0] : t('Sign In')}</a>
             <a href="/account?tab=wish" className="hide-sm">{t('Saved ·')}{' '}{wish.length}</a>
-            <button type="button" className={'basket-btn' + (bump ? ' bump' : '')} onClick={() => setCartOpen(true)}>{t('Basket ·')}{' '}{cartCount}</button>
+            <button type="button" className={'basket-btn' + (bump ? ' bump' : '')} onClick={() => { setMenu(false); setCartOpen(true); }}>{t('Basket ·')}{' '}{cartCount}</button>
+          
+            <button type="button" className="burger" aria-label={menu ? t('Close menu') : t('Open menu')} aria-expanded={menu} aria-controls="mobile-menu" onClick={() => setMenu(!menu)}>
+              <span aria-hidden="true" />
+            </button>
           </div>
         </header>
 

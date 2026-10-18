@@ -4,6 +4,7 @@ import App from './App';
 import './index.css';
 import './theme.css';
 import './glow.css';
+import './mobile.css';
 import { startSync } from './sync';
 import { initLang } from './i18n';
 import { installLinkInterceptor, upgradeLegacyHash } from './router';
