@@ -16,20 +16,28 @@ function NavDropdown({ label, active, children }: { label: string; active?: bool
   const ref = useRef<HTMLDivElement>(null);
   // The menu hangs off the header, not the scrolling nav row, so a narrow screen cannot clip it.
   const [pos, setPos] = useState({ left: 0, top: 0 });
+  /** Measure first, then show, so the menu never appears in the wrong place and slides across. */
+  const show = (on: boolean) => {
+    if (on) {
+      const btn = ref.current?.querySelector('button')?.getBoundingClientRect();
+      const hdr = ref.current?.closest('.header')?.getBoundingClientRect();
+      if (btn && hdr) setPos({ left: Math.max(8, Math.min(btn.left - hdr.left - 12, hdr.width - 206)), top: btn.bottom - hdr.top });
+    }
+    setOpen(on);
+  };
   useEffect(() => {
     if (!open) return;
-    const btn = ref.current?.querySelector('button')?.getBoundingClientRect();
-    const hdr = ref.current?.closest('.header')?.getBoundingClientRect();
-    if (btn && hdr) setPos({ left: btn.left - hdr.left - 12, top: btn.bottom - hdr.top });
     const away = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    const close = () => setOpen(false);
+    window.addEventListener('resize', close);
     document.addEventListener('mousedown', away);
     document.addEventListener('keydown', esc);
-    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+    return () => { window.removeEventListener('resize', close); document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
   }, [open]);
   return (
-    <div className="dd" ref={ref} onMouseEnter={() => matchMedia('(hover: hover)').matches && setOpen(true)} onMouseLeave={() => matchMedia('(hover: hover)').matches && setOpen(false)}>
-      <button type="button" className={'dd-btn' + (active ? ' on' : '')} aria-current={active ? 'page' : undefined} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>{label} <span aria-hidden="true" style={{ fontSize: 10 }}>▾</span></button>
+    <div className="dd" ref={ref} onMouseEnter={() => matchMedia('(hover: hover)').matches && show(true)} onMouseLeave={() => matchMedia('(hover: hover)').matches && show(false)}>
+      <button type="button" className={'dd-btn' + (active ? ' on' : '')} aria-current={active ? 'page' : undefined} aria-haspopup="menu" aria-expanded={open} onClick={() => show(!open)}>{label} <span aria-hidden="true" style={{ fontSize: 10 }}>▾</span></button>
       {open && <div className="dd-menu" role="menu" style={{ left: pos.left, top: pos.top }} onClick={() => setOpen(false)}>{children}</div>}
     </div>
   );
@@ -84,13 +92,14 @@ export function Layout({ children }: { children: ReactNode }) {
             <a href="/track" {...here('track')}>{t('Track Order')}</a>
             <a href="/about" {...here('about')}>{t('About')}</a>
             <a href="/contact" {...here('contact')}>{t('Contact')}</a>
+            <LangSwitch className="nav-lang" />
           </nav>
-          <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="hdr-actions">
             <form onSubmit={doSearch} style={{ margin: 0 }} role="search">
               <input className="search" name="hq" value={hq} onChange={(e) => setHq(e.target.value)} placeholder={t('Search candles')} aria-label={t('Search candles')} />
             </form>
-            <a href={user ? '/account' : '/login'} style={{ fontSize: 14, fontWeight: 500 }}>{user ? 'Hi, ' + user.name.split(' ')[0] : t('Sign In')}</a>
-            <a href="/account?tab=wish" className="hide-sm" style={{ fontSize: 14, fontWeight: 500 }}>{t('Saved ·')}{' '}{wish.length}</a>
+            <a href={user ? '/account' : '/login'} className="hdr-user">{user ? t('Hi,') + ' ' + user.name.split(' ')[0] : t('Sign In')}</a>
+            <a href="/account?tab=wish" className="hide-sm">{t('Saved ·')}{' '}{wish.length}</a>
             <button type="button" className={'basket-btn' + (bump ? ' bump' : '')} onClick={() => setCartOpen(true)}>{t('Basket ·')}{' '}{cartCount}</button>
           </div>
         </header>

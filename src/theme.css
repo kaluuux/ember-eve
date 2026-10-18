@@ -305,24 +305,6 @@ a { text-underline-offset: 3px; }
 @media (max-width: 520px) { .foot-main { grid-template-columns: 1fr; } }
 .sec-head.center-head { margin-bottom: 40px; }
 
-/* header: one tidy row on wide screens, graceful wrap below */
-.header { padding: 12px 28px; gap: 20px; }
-.header .nav { gap: 22px; flex-wrap: nowrap; white-space: nowrap; }
-.header .brand span { font-size: 25px; }
-.header .search { width: 132px; padding: 8px 14px; }
-.header .search:focus { width: 190px; }
-@media (min-width: 1181px) { .header { flex-wrap: nowrap; } }
-@media (max-width: 1180px) {
-  .header { row-gap: 8px; }
-  .header .nav { order: 3; width: 100%; justify-content: center; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
-  .header .nav::-webkit-scrollbar { display: none; }
-}
-@media (max-width: 720px) {
-  .header { padding: 10px 16px; }
-  .header .nav { justify-content: flex-start; gap: 20px; }
-  .header .search { display: none; }
-}
-
 /* image placeholder with a soft candle outline (until real photography is added) */
 .ph-art { background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 55%), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 22c5 7 7 11 7 15a7 7 0 0 1-14 0c0-4 2-8 7-15Z' fill='none' stroke='%238F6642' stroke-opacity='.35' stroke-width='1.6'/%3E%3Cpath d='M38 48h24v26a4 4 0 0 1-4 4H42a4 4 0 0 1-4-4V48Z' fill='none' stroke='%238F6642' stroke-opacity='.35' stroke-width='1.6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: center, center 46%; background-size: cover, 38%; }
 @media (max-width: 720px) {
@@ -391,19 +373,51 @@ html[lang='si'] body, html[lang='ta'] body { line-height: 1.65; }
 html[lang='si'] .btn, html[lang='ta'] .btn { letter-spacing: 0; }
 html[lang='si'] .nav a, html[lang='ta'] .nav a { letter-spacing: 0; }
 
-/* Sinhala and Tamil words run longer than English: keep the header on one row */
 .header .brand span { white-space: nowrap; }
-html[lang='si'] .header .nav, html[lang='ta'] .header .nav { gap: 15px; }
-html[lang='si'] .header .nav a, html[lang='ta'] .header .nav a, html[lang='si'] .header .dd-btn, html[lang='ta'] .header .dd-btn { font-size: 13.5px; }
-html[lang='si'] .header .search, html[lang='ta'] .header .search { width: 100px; }
-html[lang='si'] .header, html[lang='ta'] .header { gap: 14px; }
-html[lang='si'] .header > div:last-child, html[lang='ta'] .header > div:last-child { flex-wrap: nowrap !important; gap: 12px !important; white-space: nowrap; }
-@media (max-width: 1420px) { html[lang='si'] .header a.hide-sm, html[lang='ta'] .header a.hide-sm { display: none; } }
 html[lang='si'] .hero-title { font-size: clamp(32px, 4.2vw, 52px); line-height: 1.22; letter-spacing: 0; }
 html[lang='ta'] .hero-title { font-size: clamp(32px, 4.4vw, 54px); line-height: 1.18; letter-spacing: 0; }
 html[lang='si'] .h1, html[lang='ta'] .h1 { line-height: 1.25; }
 .lang-switch button { white-space: nowrap; }
 
-/* the dropdown is positioned against the header so the scrolling nav row never clips it */
-.header .dd { position: static; }
-.header .dd-menu { position: absolute; }
+/* ================================================================ header layout
+ * brand | nav | actions on one row when there is room, otherwise brand + actions on top and the nav on its own row.
+ * Sinhala and Tamil words run longer, so they switch to two rows at a wider screen. */
+.header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: 'brand nav actions'; align-items: center; column-gap: 24px; row-gap: 6px; padding: 12px 28px; }
+.header .brand { grid-area: brand; white-space: nowrap; }
+.header .nav { grid-area: nav; display: flex; align-items: center; justify-content: flex-start; gap: 22px; flex-wrap: nowrap; white-space: nowrap; min-width: 0; overflow-x: auto; scrollbar-width: none; padding: 4px 2px; font-size: 14px; }
+.header .nav::-webkit-scrollbar { display: none; }
+.header .nav > :first-child { margin-left: auto; }
+@media (min-width: 761px) { .header .nav > :nth-last-child(2) { margin-right: auto; } }
+@media (max-width: 760px) { .header .nav > :last-child { margin-right: auto; } }
+.header .nav > a, .header .dd-btn { white-space: nowrap; flex: none; }
+.header .dd { position: static; flex: none; }
+.header .dd-menu { position: absolute; z-index: 40; }
+.hdr-actions { grid-area: actions; display: flex; align-items: center; gap: 14px; flex-wrap: nowrap; white-space: nowrap; justify-self: end; }
+.hdr-actions a { font-size: 14px; font-weight: 500; }
+.hdr-user { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+.header .search { width: 132px; padding: 8px 14px; }
+.header .search:focus { width: 180px; }
+.nav-lang { display: none; flex: none; }
+@media (max-width: 1239px) {
+  .header { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'brand actions' 'nav nav'; }
+}
+html[lang='si'] .header .nav, html[lang='ta'] .header .nav { gap: 18px; font-size: 13.5px; }
+html[lang='si'] .header .dd-btn, html[lang='ta'] .header .dd-btn { font-size: 13.5px; }
+@media (max-width: 1559px) {
+  html[lang='si'] .header, html[lang='ta'] .header { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'brand actions' 'nav nav'; }
+}
+@media (max-width: 760px) { .nav-lang { display: inline-flex; margin-left: 4px; } }
+@media (max-width: 720px) {
+  .header { padding: 10px 16px; column-gap: 12px; }
+  .header .search { display: none; }
+  .header .nav { gap: 20px; }
+  .hdr-actions { gap: 12px; }
+  .hdr-user { max-width: 84px; }
+}
+@media (max-width: 420px) {
+  .header .brand { gap: 8px; }
+  .header .brand span { font-size: 20px; }
+  .header .brand img { width: 32px; height: 32px; }
+  .hdr-actions { gap: 10px; }
+  .hdr-actions .basket-btn { padding: 8px 12px; }
+}
