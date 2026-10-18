@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+import { tr } from './i18n';
 import type { CartLine, Category, Color, Discount, Order, Product, Review, Season, Session, Settings, User } from './types';
 import { DEFAULT_SETTINGS, EMPTY, get, set, useStored, withDefaults } from './store';
 import { computeTotals, describe, normalize, selectionTint, salesFromOrders, shelfProducts, unitPrice, visibleProducts, blendValid, type Selection, type Shelf, type Totals } from './commerce';
@@ -120,11 +121,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const have = cur.filter((x) => x.pid === pid).reduce((a, x) => a + x.qty, 0);
     const room = p.stock === null ? 10 : p.stock - have;
     const n = Math.min(sel.qty, room);
-    if (n <= 0) { flash(p.stock === 0 ? 'Sold out' : 'Only ' + p.stock + ' in stock'); return false; }
+    if (n <= 0) { flash(p.stock === 0 ? 'Sold out' : tr('Only {n} in stock', { n: p.stock ?? 0 })); return false; }
     if (i >= 0) cur[i] = { ...cur[i], qty: cur[i].qty + n };
-    else cur.push({ key, pid, sel: { opts: sel.opts, color: sel.color, blend: sel.blend, ...(sel.sticker?.trim() ? { sticker: sel.sticker.trim() } : {}) }, name: p.name, sub: describe(p, sel, palette), unit: unitPrice(p, sel, st), tint: selectionTint(sel, palette), qty: n });
+    else cur.push({ key, pid, sel: { opts: sel.opts, color: sel.color, blend: sel.blend, ...(sel.sticker?.trim() ? { sticker: sel.sticker.trim() } : {}) }, name: p.name, sub: describe(p, sel, palette), unit: unitPrice(p, sel, st), tint: selectionTint(sel, palette), ...(p.images?.[0] ? { img: p.images[0] } : {}), qty: n });
     set('cart', cur);
-    flash(n < sel.qty ? 'Added ' + n + ' (stock limit)' : 'Added to basket');
+    flash(n < sel.qty ? tr('Added {n} (stock limit)', { n }) : 'Added to basket');
     return true;
   }, [flash]);
 
@@ -133,11 +134,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const i = cur.findIndex((x) => x.key === key);
     if (i < 0) return;
     const l = cur[i];
+    if (l.kind === 'giftcard' && d > 0) { flash('Add another gift card for each one you want to send.'); return; }
     const others = cur.filter((x, j) => j !== i && x.pid === l.pid).reduce((a, x) => a + x.qty, 0);
     const stock = l.pid ? get<Product[]>('products', []).find((p) => p.id === l.pid)?.stock : null;
     const max = l.pid && stock !== null && stock !== undefined ? stock - others : 10;
     let q = l.qty + d;
-    if (q > max) { flash('Only ' + max + ' available'); q = max; }
+    if (q > max) { flash(tr('Only {n} available', { n: max })); q = max; }
     if (q <= 0) cur.splice(i, 1); else cur[i] = { ...l, qty: q };
     set('cart', cur);
   }, [flash]);

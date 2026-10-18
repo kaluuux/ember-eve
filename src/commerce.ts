@@ -6,7 +6,7 @@ export interface Totals {
 }
 
 export function computeTotals(
-  cart: CartLine[], d: Discount | undefined, st: Settings, shipM: 'standard' | 'express' | 'pickup' = 'standard', giftWrap = false, district = '',
+  cart: CartLine[], d: Discount | undefined, st: Settings, shipM: 'standard' | 'express' | 'pickup' | 'digital' = 'standard', giftWrap = false, district = '',
 ): Totals {
   const sub = cart.reduce((a, l) => a + l.unit * l.qty, 0);
   let disc = 0, freeShipCode = false;
@@ -17,7 +17,7 @@ export function computeTotals(
   }
   const net = sub - disc;
   const rate = st.districts.find((x) => x.name.toLowerCase() === district.toLowerCase())?.rate ?? st.standard;
-  const ship = sub === 0 || shipM === 'pickup' ? 0 : shipM === 'express' ? st.express : net >= st.freeOver || freeShipCode ? 0 : rate;
+  const ship = sub === 0 || shipM === 'pickup' || shipM === 'digital' ? 0 : shipM === 'express' ? st.express : net >= st.freeOver || freeShipCode ? 0 : rate;
   const wrap = giftWrap && sub > 0 ? st.giftWrap : 0;
   return { sub, disc, ship, wrap, total: net + ship + wrap, freeLeft: Math.max(0, st.freeOver - net), freeOver: st.freeOver, freeShipCode };
 }

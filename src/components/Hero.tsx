@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useT } from '../i18n';
 
 const clamp01 = (a: number, b: number, x: number) => Math.min(1, Math.max(0, (x - a) / (b - a)));
 const ease = (t: number) => t * t * (3 - 2 * t);
@@ -25,6 +26,7 @@ function Flame({ at, dur }: { at: number; dur: number }) {
 
 /** Scroll-driven hero: a jar candle ignites and burns down as the page scrolls. */
 export function Hero() {
+  const t = useT();
   const ref = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -82,28 +84,28 @@ export function Hero() {
         </div>
         <div style={{ maxWidth: 1120, width: '100%', margin: '0 auto', padding: '0 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 32, alignItems: 'center', position: 'relative' }}>
           <div style={{ position: 'relative', zIndex: 2 }}>
-            <div className="hero-eyebrow">Light up your little moments</div>
-            <h1 className="hero-title">Light something that feels like home.</h1>
+            <div className="hero-eyebrow">{t('Light up your little moments')}</div>
+            <h1 className="hero-title">{t('Light something that feels like home.')}</h1>
             <p style={{ fontSize: 18, lineHeight: '28px', color: '#D9CCBF', margin: '0 0 28px', maxWidth: 480 }}>
-              Hand-poured soy wax candles in mold, glass and jar. Choose your colour, or blend your own, or build a gift box for someone you love.
+              {t('Hand-poured soy wax candles in mold, glass and jar. Choose your colour, or blend your own, or build a gift box for someone you love.')}
             </p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <a href="#/shop" className="hero-cta solid">Shop Candles</a>
-              <a href="#/finder" className="hero-cta line">Find My Colour</a>
+              <a href="/shop" className="hero-cta solid">{t('Shop Candles')}</a>
+              <a href="/finder" className="hero-cta line">{t('Find My Colour')}</a>
             </div>
             <div style={{ display: 'flex', gap: 16, marginTop: 32, flexWrap: 'wrap', fontSize: 14, fontWeight: 500 }}>
               {['01 Unlit', '02 Jar ignites', '03 The collection', '04 Burn down'].map((s, i) => (
-                <span key={s} data-step style={{ color: i === 0 ? '#fff' : '#9AA0A3' }}>{s}</span>
+                <span key={s} data-step style={{ color: i === 0 ? '#fff' : '#9AA0A3' }}>{t(s)}</span>
               ))}
             </div>
-            <div data-hint style={{ marginTop: 16, fontSize: 14, color: '#CDBFB1' }}>Scroll to light the candle</div>
+            <div data-hint style={{ marginTop: 16, fontSize: 14, color: '#CDBFB1' }}>{t('Scroll to light the candle')}</div>
           </div>
           <div style={{ position: 'relative', justifySelf: 'center', height: 'min(68vh,560px)', aspectRatio: '520/600', maxWidth: '100%' }}>
             <div
               data-glow
               style={{ position: 'absolute', left: '50%', top: '50%', width: 1600, height: 1600, margin: '-800px 0 0 -800px', borderRadius: '50%', background: 'radial-gradient(circle,rgba(255,190,100,0.5) 0%,rgba(214,150,80,0.22) 22%,rgba(166,124,82,0) 55%)', opacity: 0, transform: 'scale(0.2)', pointerEvents: 'none' }}
             />
-            <svg viewBox="0 0 520 600" style={{ position: 'relative', width: '100%', height: '100%', overflow: 'visible' }} role="img" aria-label="Glass jar candle and shaped candles lighting as you scroll">
+            <svg viewBox="0 0 520 600" style={{ position: 'relative', width: '100%', height: '100%', overflow: 'visible' }} role="img" aria-label={t('Glass jar candle and shaped candles lighting as you scroll')}>
               <defs>
                 <linearGradient id="wx" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stopColor="#E2CDB0" /><stop offset="0.35" stopColor="#F6EBDA" /><stop offset="1" stopColor="#D2BA98" /></linearGradient>
                 <linearGradient id="fl" x1="0" x2="0" y1="1" y2="0"><stop offset="0" stopColor="#FF7A1F" /><stop offset="0.55" stopColor="#FFB54A" /><stop offset="1" stopColor="#FFE9A8" /></linearGradient>
@@ -159,8 +161,8 @@ export function Hero() {
               <ellipse cx="260" cy="332" rx="85" ry="8" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2" />
               <rect x="187" y="348" width="7" height="140" rx="3.5" fill="rgba(255,255,255,0.3)" />
               <rect x="205" y="452" width="110" height="54" rx="4" fill="#F3EBE1" />
-              <text x="260" y="476" textAnchor="middle" fontFamily="Libre Caslon Text,Georgia,serif" fontSize="16" fill="#26292B">Ember &amp; Eve</text>
-              <text x="260" y="493" textAnchor="middle" fontFamily="Inter,sans-serif" fontSize="8" fontWeight="600" letterSpacing="1.6" fill="#8F6642">VANILLA · 200G</text>
+              <text x="260" y="476" textAnchor="middle" fontFamily="Libre Caslon Text,Georgia,serif" fontSize="16" fill="#26292B">{t('Ember & Eve')}</text>
+              <text x="260" y="493" textAnchor="middle" fontFamily="Inter,sans-serif" fontSize="8" fontWeight="600" letterSpacing="1.6" fill="#8F6642">{t('VANILLA · 200G')}</text>
               <line data-wick x1="260" y1="372" x2="260" y2="350" stroke="#2A2A2A" strokeWidth="3" strokeLinecap="round" />
               <circle data-ember cx="260" cy="350" r="3.5" fill="#FF8A2B" opacity="0" />
               <g data-fpos transform="translate(260 350)" opacity="0">

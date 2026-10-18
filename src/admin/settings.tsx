@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { SL_DISTRICTS, get, set, useStored, DEFAULT_SETTINGS, withDefaults } from '../store';
+import { SL_DISTRICTS, get, safeUrl, set, useStored, DEFAULT_SETTINGS, withDefaults } from '../store';
 import { remote } from '../remote';
-import { addAdmin, adminEmail, exportAll, getNotify, listAdmins, removeAdmin, sendTestAlert, setNotify, uploadQr, useIsAdmin } from '../sync';
+import { addAdmin, adminEmail, exportAll, getNotify, listAdmins, removeAdmin, sendTestAlert, setAdminRole, setNotify, uploadQr, useIsAdmin } from '../sync';
 import { ErrorText } from '../components/ui';
+import { PhotoManager } from './PhotoManager';
 import { PageHead } from './ui';
 import type { BankAccount, GiftBox, Settings } from '../types';
 
@@ -41,12 +42,12 @@ export function SettingsView({ flash }: { flash: Flash }) {
   useEffect(() => { setD(stored); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [JSON.stringify(stored)]);
 
   const save = (section: string) => {
-    if (d.pay.bank && !d.banks.some((b) => b.number.trim())) return setErr('Add a bank account number, or turn bank transfer off.');
-    if (d.whatsapp && !/^\d{9,15}$/.test(d.whatsapp)) return setErr('WhatsApp number: digits only with country code, for example 94771234567.');
+    if (section === 'pay' && d.pay.bank && !d.banks.some((b) => b.number.trim())) return setErr('Add a bank account number, or turn bank transfer off.');
+    if (section === 'store') for (const k of ['instagram', 'facebook', 'tiktok', 'youtube'] as const) if (d[k].trim() && !safeUrl(d[k])) return setErr('Social links must start with https://');
+    if (section === 'store' && d.whatsapp && !/^\d{9,15}$/.test(d.whatsapp)) return setErr('WhatsApp number: digits only with country code, for example 94771234567.');
     setErr('');
     set('settings', { ...withDefaults(get<Settings>('settings', DEFAULT_SETTINGS)), ...d });
     setSaved('Saved'); setTimeout(() => setSaved(''), 2500);
-    void section;
   };
 
   const setBank = (i: number, o: Partial<BankAccount>) => up({ banks: d.banks.map((x, j) => (j === i ? { ...x, ...o } : x)) });
@@ -65,6 +66,13 @@ export function SettingsView({ flash }: { flash: Flash }) {
             <Label label="WhatsApp number for orders (digits, with country code)"><input className="input" inputMode="numeric" placeholder="94771234567" value={d.whatsapp} onChange={(e) => up({ whatsapp: e.target.value.replace(/\D/g, '') })} /></Label>
             <Label label="Store pickup address (leave empty to turn pickup off)"><input className="input" value={d.pickupAddress} onChange={(e) => up({ pickupAddress: e.target.value })} /></Label>
           </div>
+          <div className="h3" style={{ fontSize: 14, marginTop: 4 }}>Social links</div>
+          <div className="fields two">
+            <Label label="Instagram link"><input className="input" placeholder="https://instagram.com/emberandeve" value={d.instagram} onChange={(e) => up({ instagram: e.target.value })} /></Label>
+            <Label label="Facebook link"><input className="input" placeholder="https://facebook.com/emberandeve" value={d.facebook} onChange={(e) => up({ facebook: e.target.value })} /></Label>
+            <Label label="TikTok link"><input className="input" placeholder="https://tiktok.com/@emberandeve" value={d.tiktok} onChange={(e) => up({ tiktok: e.target.value })} /></Label>
+            <Label label="YouTube link"><input className="input" placeholder="https://youtube.com/@emberandeve" value={d.youtube} onChange={(e) => up({ youtube: e.target.value })} /></Label>
+          </div>
           <div className="h3" style={{ fontSize: 14, marginTop: 4 }}>Invoice details</div>
           <div className="fields two">
             <Label label="Business address"><input className="input" value={d.businessAddress} onChange={(e) => up({ businessAddress: e.target.value })} /></Label>
@@ -73,6 +81,10 @@ export function SettingsView({ flash }: { flash: Flash }) {
             <Label label="Note on unpaid invoices"><input className="input" placeholder="Please confirm the order details and delivery information before payment" value={d.invoiceNote} onChange={(e) => up({ invoiceNote: e.target.value })} /></Label>
             <Label label="Payment due after (days)"><input className="input" type="number" min={0} value={d.invoiceDueDays} onChange={(e) => up({ invoiceDueDays: num(e.target.value) })} /></Label>
           </div>
+        </Section>
+
+        <Section title="Home page gallery" hint="Photos shown in the 'Little moments, lit' section. Leave empty to show tasteful placeholders." onSave={() => save('gallery')} saved={saved}>
+          <PhotoManager images={d.gallery} onChange={(gallery) => up({ gallery })} folder="gallery" max={12} />
         </Section>
 
         <Section title="Delivery" hint="Customers in a district with its own rate pay that rate; all others pay the standard rate." onSave={() => save('delivery')} saved={saved}>
@@ -130,6 +142,21 @@ export function SettingsView({ flash }: { flash: Flash }) {
           ))}
           <div><button type="button" className="btn-xs" onClick={() => up({ giftBoxes: d.giftBoxes.concat({ id: 'b' + Math.random().toString(36).slice(2, 7), label: '', slots: 3, fee: d.giftBoxFee }) })}>Add box size</button></div>
         </Section>
+
+        {remote && (
+          <Section title="Rewards" hint="Optional ways to bring customers back. Each is off until you give it a value. Customers need an account to earn and spend store credit." onSave={() => save('rewards')} saved={saved}>
+            <Toggle on={d.giftCardsOn} onChange={(v) => up({ giftCardsOn: v })} title="Sell gift cards" sub="Customers buy a card for a friend; once payment is approved you will see the code on the order and the buyer's order page." />
+            <div className="fields two">
+              <Label label="Smallest gift card (Rs)"><input className="input" type="number" min={0} value={d.giftCardMin} onChange={(e) => up({ giftCardMin: num(e.target.value) })} /></Label>
+              <Label label="Largest gift card (Rs)"><input className="input" type="number" min={0} value={d.giftCardMax} onChange={(e) => up({ giftCardMax: num(e.target.value) })} /></Label>
+              <Label label="Cashback on paid orders (% as store credit, 0 = off)"><input className="input" type="number" min={0} max={50} value={d.loyaltyPct} onChange={(e) => up({ loyaltyPct: Math.min(50, num(e.target.value)) })} /></Label>
+              <span />
+              <Label label="Friend's first order discount (Rs, 0 = off)"><input className="input" type="number" min={0} value={d.referralFriend} onChange={(e) => up({ referralFriend: num(e.target.value) })} /></Label>
+              <Label label="Reward for the person who shared (Rs credit)"><input className="input" type="number" min={0} value={d.referralReward} onChange={(e) => up({ referralReward: num(e.target.value) })} /></Label>
+            </div>
+            <div className="muted" style={{ fontSize: 13 }}>Every signed-in customer gets a personal link (yourshop/?ref=CODE) on their account page. Credit is only paid out once the order is marked paid, and taken back if it is cancelled.</div>
+          </Section>
+        )}
 
         {remote ? <><PhoneAlerts flash={flash} /><TeamAndBackup flash={flash} /></> : <LocalPassword />}
       </div>
@@ -229,16 +256,17 @@ function PhoneAlerts({ flash }: { flash: Flash }) {
 /* -------------------------------------------------------- admin team and backup */
 function TeamAndBackup({ flash }: { flash: Flash }) {
   const isAdmin = useIsAdmin();
-  const [admins, setAdmins] = useState<string[]>([]);
+  const [admins, setAdmins] = useState<{ email: string; role: 'owner' | 'staff' }[]>([]);
   const [me, setMe] = useState('');
   const [email, setEmail] = useState('');
+  const [newRole, setNewRole] = useState<'owner' | 'staff'>('staff');
   const [err, setErr] = useState('');
   const refresh = () => { void listAdmins().then(setAdmins); };
   useEffect(() => { if (isAdmin) { refresh(); void adminEmail().then((e) => setMe(e.toLowerCase())); } }, [isAdmin]);
 
   const add = async () => {
     if (!/^\S+@\S+\.\S+$/.test(email)) return setErr('Enter a valid email address.');
-    const e = await addAdmin(email);
+    const e = await addAdmin(email, newRole);
     if (e) return setErr(e);
     setErr(''); setEmail(''); refresh(); flash('Admin added');
   };
@@ -259,18 +287,24 @@ function TeamAndBackup({ flash }: { flash: Flash }) {
 
   return (
     <>
-      <Section title="Admin team" hint="Each admin signs in with their own email and password. To add someone, they first create an account on the store (Sign Up), then you add their email here.">
+      <Section title="Team" hint="Owners see and change everything. Staff can only see the orders to pack: names, phone numbers, addresses and items, never prices, payments, customers or settings. They can mark orders packed, add tracking and mark dispatched or delivered. To add someone, they first create an account on the store (Sign Up), then you add their email here.">
         <div className="stack" style={{ gap: 8 }}>
           {admins.map((a) => (
-            <div key={a} className="row-between" style={{ padding: '8px 0', borderBottom: '1px solid var(--line)' }}>
-              <span>{a}{a === me && <span className="tagpill" style={{ marginLeft: 8 }}>You</span>}</span>
-              {a !== me && <button type="button" className="btn-xs danger" onClick={() => remove(a)}>Remove</button>}
+            <div key={a.email} className="row-between" style={{ padding: '8px 0', borderBottom: '1px solid var(--line)', gap: 8, flexWrap: 'wrap' }}>
+              <span>{a.email}{a.email === me && <span className="tagpill" style={{ marginLeft: 8 }}>You</span>}</span>
+              <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <select className="input" style={{ width: 110 }} aria-label={'Role for ' + a.email} value={a.role} onChange={async (e) => { const m = await setAdminRole(a.email, e.target.value as 'owner' | 'staff'); if (m) flash(m); refresh(); }}>
+                  <option value="owner">Owner</option><option value="staff">Staff</option>
+                </select>
+                {a.email !== me && <button type="button" className="btn-xs danger" onClick={() => remove(a.email)}>Remove</button>}
+              </span>
             </div>
           ))}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <input className="input" style={{ flex: '1 1 240px' }} type="email" placeholder="new-admin@email.com" aria-label="New admin email" value={email} onChange={(e) => { setEmail(e.target.value); setErr(''); }} />
-          <button type="button" className="btn" onClick={add}>Add admin</button>
+          <input className="input" style={{ flex: '1 1 240px' }} type="email" placeholder="new-person@email.com" aria-label="New team member email" value={email} onChange={(e) => { setEmail(e.target.value); setErr(''); }} />
+          <select className="input" style={{ width: 110 }} aria-label="Role" value={newRole} onChange={(e) => setNewRole(e.target.value as 'owner' | 'staff')}><option value="staff">Staff</option><option value="owner">Owner</option></select>
+          <button type="button" className="btn" onClick={add}>Add</button>
         </div>
         <ErrorText>{err}</ErrorText>
       </Section>

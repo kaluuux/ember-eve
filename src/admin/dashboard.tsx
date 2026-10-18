@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { EMPTY, fmtDate, money, useStored } from '../store';
 import { go } from '../router';
 import { PageHead, PayBadge, STATUS_STYLE, StatusBadge, compact, payOf } from './ui';
+import { NO_COSTS, cashOf, profitOf, type Costs } from '../profit';
 import type { Category, Message, Order, OrderStatus, Product, Review, User } from '../types';
 
 const DAY = 86400000;
@@ -43,7 +44,7 @@ function buildBuckets(paid: Order[], range: Range, now: number): Bucket[] {
   paid.forEach((o) => {
     const t = new Date(o.date).getTime();
     const b = out.find((x) => t >= x.from && t < x.to);
-    if (b) { b.value += o.total; b.orders += 1; }
+    if (b) { b.value += cashOf(o); b.orders += 1; }
   });
   return out;
 }
@@ -88,6 +89,7 @@ export function Dashboard() {
   const users = useStored<User[]>('users', EMPTY);
   const msgs = useStored<Message[]>('messages', EMPTY);
   const reviews = useStored<Review[]>('reviews', EMPTY);
+  const costs = useStored<Costs>('costs', NO_COSTS);
   const [range, setRange] = useState<Range>('30');
   const [hover, setHover] = useState(-1);
   const [asTable, setAsTable] = useState(false);
@@ -99,7 +101,8 @@ export function Dashboard() {
     const prev = (o: Order) => range !== 'all' && now - t(o) > span && now - t(o) <= 2 * span;
     const live = orders.filter((o) => o.status !== 'Cancelled');
     const paid = live.filter((o) => payOf(o) === 'Paid');
-    const sum = (l: Order[]) => l.reduce((a, o) => a + o.total, 0);
+    const sum = (l: Order[]) => l.reduce((a, o) => a + cashOf(o), 0);
+    const gross = (l: Order[]) => l.reduce((a, o) => { const r = profitOf(o, costs); return { profit: a.profit + r.profit, goods: a.goods + r.goods, partial: a.partial || !r.known }; }, { profit: 0, goods: 0, partial: false });
     const inCur = live.filter(cur), inPrev = live.filter(prev);
     const paidCur = paid.filter(cur), paidPrev = paid.filter(prev);
     const joined = (u: User) => { const j = new Date(u.joined).getTime(); return now - j <= span; };
@@ -109,26 +112,29 @@ export function Dashboard() {
     orders.filter(cur).forEach((o) => { status[o.status] += 1; });
 
     const catOf = (pid: number) => categories.find((c) => c.id === products.find((p) => p.id === pid)?.cat)?.name ?? 'Other';
-    const byCat: Record<string, number> = {}, byProd: Record<string, { units: number; rev: number }> = {}, byPay: Record<string, number> = {};
+    const byCat: Record<string, number> = {}, byProd: Record<string, { units: number; rev: number; profit: number }> = {}, byPay: Record<string, number> = {};
     inCur.forEach((o) => {
       byPay[o.pay || 'Unknown'] = (byPay[o.pay || 'Unknown'] ?? 0) + 1;
       o.items.forEach((i) => {
         const cat = i.pid ? catOf(i.pid) : 'Gift boxes';
         byCat[cat] = (byCat[cat] ?? 0) + i.unit * i.qty;
         const name = i.pid ? i.name : 'Gift boxes';
-        const e = (byProd[name] ??= { units: 0, rev: 0 });
+        if (i.kind === 'giftcard') return;
+        const e = (byProd[name] ??= { units: 0, rev: 0, profit: 0 });
         e.units += i.qty; e.rev += i.unit * i.qty;
+        const lc = typeof i.cost === 'number' ? i.cost * i.qty : i.pid ? (costs[String(i.pid)] ?? 0) * i.qty : 0;
+        e.profit += i.unit * i.qty - lc;
       });
     });
     const lows = products.filter((p) => p.stock !== null && p.stock <= 5);
     return {
-      now, paid, inCur, inPrev, paidCur, revCur: sum(paidCur), revPrev: sum(paidPrev),
+      now, paid, inCur, inPrev, paidCur, revCur: sum(paidCur), revPrev: sum(paidPrev), gp: gross(paidCur), gpPrev: gross(paidPrev),
       avgCur: inCur.length ? sum(inCur) / inCur.length : 0, avgPrev: inPrev.length ? sum(inPrev) / inPrev.length : 0,
       waiting, waitingSum: sum(waiting), status, byCat, byProd, byPay, lows,
       newCust: users.filter(joined).length, newCustPrev: users.filter(joinedPrev).length,
       buckets: buildBuckets(paid, range, now),
     };
-  }, [orders, products, categories, users, range]);
+  }, [orders, products, categories, users, range, costs]);
 
   const toCheck = orders.filter((o) => o.status !== 'Cancelled' && payOf(o) === 'Receipt sent').length;
   const toProcess = orders.filter((o) => o.status === 'Processing' && payOf(o) === 'Paid').length;
@@ -148,22 +154,23 @@ export function Dashboard() {
     <>
       <PageHead
         title="Dashboard"
-        sub={'How the shop is doing, ' + rangeWord + '. Revenue counts orders whose payment you have approved.'}
+        sub={'How the shop is doing, ' + rangeWord + '. Revenue is money received on approved orders. Profit is candle sales after discounts minus the cost prices you have entered, before delivery.'}
         actions={<div className="seg" role="group" aria-label="Time range">{RANGES.map(([k, l]) => <button key={k} type="button" className={range === k ? 'on' : ''} aria-pressed={range === k} onClick={() => setRange(k)}>{l}</button>)}</div>}
       />
 
       {(toCheck + toProcess + unread + pendingReviews + d.lows.length > 0) && (
         <div className="attn" aria-label="Needs your attention">
-          {toCheck > 0 && <a href="#/admin/orders?pay=review" className="hot"><b>{toCheck}</b><span>{toCheck === 1 ? 'receipt' : 'receipts'} to check and approve</span></a>}
-          {toProcess > 0 && <a href="#/admin/orders?status=Processing"><b>{toProcess}</b><span>paid {toProcess === 1 ? 'order' : 'orders'} to pour and dispatch</span></a>}
-          {unread > 0 && <a href="#/admin/messages"><b>{unread}</b><span>unread {unread === 1 ? 'message' : 'messages'}</span></a>}
-          {pendingReviews > 0 && <a href="#/admin/reviews"><b>{pendingReviews}</b><span>{pendingReviews === 1 ? 'review' : 'reviews'} waiting for approval</span></a>}
-          {d.lows.length > 0 && <a href="#/admin/products"><b>{d.lows.length}</b><span>{d.lows.length === 1 ? 'candle' : 'candles'} low or out of stock</span></a>}
+          {toCheck > 0 && <a href="/admin/orders?pay=review" className="hot"><b>{toCheck}</b><span>{toCheck === 1 ? 'receipt' : 'receipts'} to check and approve</span></a>}
+          {toProcess > 0 && <a href="/admin/orders?status=Processing"><b>{toProcess}</b><span>paid {toProcess === 1 ? 'order' : 'orders'} to pour and dispatch</span></a>}
+          {unread > 0 && <a href="/admin/messages"><b>{unread}</b><span>unread {unread === 1 ? 'message' : 'messages'}</span></a>}
+          {pendingReviews > 0 && <a href="/admin/reviews"><b>{pendingReviews}</b><span>{pendingReviews === 1 ? 'review' : 'reviews'} waiting for approval</span></a>}
+          {d.lows.length > 0 && <a href="/admin/products"><b>{d.lows.length}</b><span>{d.lows.length === 1 ? 'candle' : 'candles'} low or out of stock</span></a>}
         </div>
       )}
 
       <div className="kpis">
         <Kpi label="Revenue (paid)" value={money(d.revCur)} cur={d.revCur} prev={d.revPrev} note={range === 'all' ? undefined : 'vs previous ' + range + ' days'} />
+        <Kpi label="Profit" value={money(d.gp.profit)} cur={d.gp.profit} prev={d.gpPrev.profit} note={(d.gp.goods > 0 ? Math.round((d.gp.profit / d.gp.goods) * 100) + '% margin' : 'on candles') + (d.gp.partial ? ' · some costs not set' : '')} />
         <Kpi label="Orders" value={String(d.inCur.length)} cur={d.inCur.length} prev={d.inPrev.length} note={range === 'all' ? undefined : 'vs previous'} />
         <Kpi label="Average order" value={money(d.avgCur)} cur={d.avgCur} prev={d.avgPrev} />
         <Kpi label="Awaiting payment" value={money(d.waitingSum)} note={d.waiting.length + (d.waiting.length === 1 ? ' order' : ' orders') + ' not yet approved'} />
@@ -216,7 +223,7 @@ export function Dashboard() {
 
         <section className="panel span-6">
           <div className="panel-head"><div><div className="h3">Top candles</div><div className="sub">By units sold, {rangeWord}</div></div></div>
-          <HBars empty="No sales in this period." rows={topProds.map(([k, v]) => ({ key: k, label: k, value: v.units, text: v.units + ' sold · ' + money(v.rev) }))} />
+          <HBars empty="No sales in this period." rows={topProds.map(([k, v]) => ({ key: k, label: k, value: v.units, text: v.units + ' sold · ' + money(v.rev) + ' · ' + money(v.profit) + ' profit' }))} />
         </section>
 
         <section className="panel span-4">
@@ -236,7 +243,7 @@ export function Dashboard() {
         </section>
 
         <section className="panel span-4">
-          <div className="panel-head"><div><div className="h3">Recent orders</div></div><a href="#/admin/orders" style={{ fontSize: 13 }}>View all</a></div>
+          <div className="panel-head"><div><div className="h3">Recent orders</div></div><a href="/admin/orders" style={{ fontSize: 13 }}>View all</a></div>
           {recent.length === 0 ? <div className="empty">No orders yet.</div> : (
             <div className="list-rows">
               {recent.map((o) => (

@@ -1,5 +1,5 @@
 export interface Color { id: string; name: string; hex: string }
-export interface Category { id: string; name: string; blurb: string }
+export interface Category { id: string; name: string; blurb: string; /** Photo for the home page tile */ image?: string }
 /** A choice inside an option group. `colors` restricts the colours offered when this choice is picked (e.g. brown jar: white only). */
 export interface Opt { id: string; label: string; add: number; colors?: string[] }
 export interface Group { id: string; label: string; options: Opt[] }
@@ -10,6 +10,8 @@ export interface Season { id: string; name: string; from: string; to: string; fo
 export interface Product {
   id: number;
   name: string;
+  /** Photos, first one is the cover (URLs, or data URLs in the offline demo) */
+  images?: string[];
   /** Category id */
   cat: string;
   blurb: string;
@@ -66,6 +68,12 @@ export interface Settings {
   /** Per-district standard delivery rate; districts not listed use `standard` */
   districts: District[];
   pickupAddress: string;
+  /** Photos for the home page gallery */
+  gallery: string[];
+  instagram: string;
+  facebook: string;
+  tiktok: string;
+  youtube: string;
   /** Shown on invoices */
   businessAddress: string;
   businessPhone: string;
@@ -80,6 +88,16 @@ export interface Settings {
   banks: BankAccount[];
   /** Old single-account field, converted into `banks` when settings are read */
   bank?: { bank: string; name: string; number: string; branch: string };
+  /** Sell gift cards; each is a code the recipient spends at checkout */
+  giftCardsOn: boolean;
+  giftCardMin: number;
+  giftCardMax: number;
+  /** Percentage of each paid order given back as store credit (0 = off) */
+  loyaltyPct: number;
+  /** Rs off a friend's first order when they use a referral link (0 = off) */
+  referralFriend: number;
+  /** Rs of store credit the referrer earns when that friend's order is paid */
+  referralReward: number;
   pay: Record<PayMethod, boolean>;
   payhereMerchantId: string;
   payhereSandbox: boolean;
@@ -105,13 +123,18 @@ export interface CartLine {
   sub: string;
   unit: number;
   tint: string;
+  /** Product photo shown in the basket, when there is one */
+  img?: string;
   qty: number;
   /** Personal note for a gift box */
   note?: string;
+  /** A gift card line: the recipient gets a code once the order is paid */
+  kind?: 'giftcard';
+  gc?: { to: string; from: string; msg: string };
 }
 
 export interface ItemSel { opts: Record<string, string>; color: string; blend: string[]; sticker?: string }
-export interface OrderItem { name: string; sub: string; qty: number; unit: number; tint: string; pid: number; note?: string; sel?: ItemSel; boxId?: string; box?: { pid: number; name: string; sel?: ItemSel }[] }
+export interface OrderItem { kind?: 'giftcard'; gc?: { to: string; from: string; msg: string }; /** What the candle cost us to make (private, owner only) */ cost?: number; name: string; sub: string; qty: number; unit: number; tint: string; pid: number; note?: string; sel?: ItemSel; boxId?: string; box?: { pid: number; name: string; sel?: ItemSel }[] }
 export type OrderStatus = 'Processing' | 'Dispatched' | 'Delivered' | 'Cancelled';
 
 export interface Order {
@@ -127,9 +150,21 @@ export interface Order {
   disc: number;
   code: string;
   ship: number;
-  shipM: 'standard' | 'express' | 'pickup';
+  shipM: 'standard' | 'express' | 'pickup' | 'digital';
   wrap: number;
   total: number;
+  /** What is left to pay after gift card and store credit */
+  due?: number;
+  refDisc?: number;
+  gcCode?: string | null;
+  gcApplied?: number;
+  creditApplied?: number;
+  cashback?: number;
+  /** Gift cards bought on this order, issued once it is paid */
+  giftCards?: { code: string; amount: number; to?: string }[];
+  /** Customer asked to cancel; the shop decides */
+  cancelRequest?: { state: 'pending' | 'declined'; at: string; reason: string };
+  packed?: boolean;
   status: OrderStatus;
   pay: string;
   payMethod?: PayMethod;
@@ -148,6 +183,6 @@ export interface Order {
   log: { s: string; d: string }[];
 }
 
-export interface Review { id: number; pid: number; who: string; stars: number; q: string; date: string; approved: boolean }
+export interface Review { id: number; pid: number; who: string; stars: number; q: string; date: string; approved: boolean; /** Written by someone who bought it */ verified?: boolean; orderId?: string; /** Storage paths (or data URLs offline) */ photos?: string[] }
 export interface Message { id: number; name: string; email: string; text: string; date: string; read: boolean }
 export interface Subscriber { email: string; date: string }

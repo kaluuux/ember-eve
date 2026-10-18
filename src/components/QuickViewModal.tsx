@@ -3,8 +3,10 @@ import { Stepper } from './ui';
 import { Configurator } from './Configurator';
 import { blendValid, normalize, selectionTint, unitPrice } from '../commerce';
 import { money } from '../store';
+import { useT } from '../i18n';
 
 export function QuickViewModal() {
+  const t = useT();
   const { qv, setQv, products, addCandle, colors, settings } = useApp();
   const p = qv ? products.find((x) => x.id === qv.id) : undefined;
   if (!qv || !p) return null;
@@ -19,11 +21,11 @@ export function QuickViewModal() {
       <div className="scrim" onClick={close} />
       <div className="modal" role="dialog" aria-label={p.name}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 24 }}>
-          <div className="ph ph-art" style={{ backgroundColor: selectionTint(sel, colors), aspectRatio: '1', borderRadius: 18 }}>Image: {p.name}</div>
+          {p.images?.[0] ? <img className="qv-img" src={p.images[0]} alt={p.name} /> : <div className="ph ph-art" style={{ backgroundColor: selectionTint(sel, colors), aspectRatio: '1', borderRadius: 18 }}>{t('Image:')}{' '}{p.name}</div>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div className="h3">{p.name}</div>
-              <button type="button" onClick={close} style={{ font: '500 14px Inter', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--muted)' }}>Close</button>
+              <button type="button" onClick={close} style={{ font: '500 14px Inter', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--muted)' }}>{t('Close')}</button>
             </div>
             <div style={{ fontSize: 14, lineHeight: '22px', color: 'var(--text2)' }}>{p.blurb}</div>
             <Configurator p={p} sel={sel} onChange={set} size="sm" />
@@ -31,8 +33,8 @@ export function QuickViewModal() {
               <Stepper small qty={sel.qty} onDec={() => set({ ...sel, qty: Math.max(1, sel.qty - 1) })} onInc={() => set({ ...sel, qty: Math.min(max, sel.qty + 1) })} />
               <div style={{ fontSize: 22, fontWeight: 700 }}>{money(unit * sel.qty)}</div>
             </div>
-            <button type="button" className={'btn' + (blendValid(sel) ? '' : ' disabled')} onClick={() => { if (addCandle(qv.id, sel)) close(); }}>Add to Basket</button>
-            <a href={'#/product/' + p.id} onClick={close} style={{ fontSize: 14, textAlign: 'center' }}>View full details</a>
+            <button type="button" className={'btn' + (blendValid(sel) ? '' : ' disabled')} onClick={() => { if (addCandle(qv.id, sel)) close(); }}>{t('Add to Basket')}</button>
+            <a href={'/product/' + p.id} onClick={close} style={{ fontSize: 14, textAlign: 'center' }}>{t('View full details')}</a>
           </div>
         </div>
       </div>

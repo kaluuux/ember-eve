@@ -6,6 +6,7 @@ import { useApp } from '../AppContext';
 import { Ph } from '../components/ui';
 import { SHELVES } from '../commerce';
 import type { Product } from '../types';
+import { useT } from '../i18n';
 
 export const INGREDIENTS = [
   { v: '100%', t: 'High quality soy wax', d: 'Non-toxic, clean burning and gentle on your home. Every candle is poured by hand with care and attention to detail.' },
@@ -23,10 +24,11 @@ const GALLERY = [
 ];
 
 export function WhatsInside() {
+  const t = useT();
   return (
     <section id="ingredients" className="band-dark">
       <div className="page-72">
-        <h2 className="h2" style={{ marginBottom: 24, color: '#fff' }}>What's Inside</h2>
+        <h2 className="h2" style={{ marginBottom: 24, color: '#fff' }}>{t('What\'s Inside')}</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 16 }}>
           {INGREDIENTS.map((i) => (
             <div key={i.t} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: 24, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -43,16 +45,17 @@ export function WhatsInside() {
 
 /** A titled row of up to four products. Renders nothing when there is nothing to show, so empty shelves never appear. */
 function ShelfSection({ title, blurb, href, items, tinted }: { title: string; blurb: string; href: string; items: Product[]; tinted?: boolean }) {
+  const t = useT();
   if (!items.length) return null;
   return (
     <section className={tinted ? 'band-white' : undefined}>
       <div className="page">
         <Reveal className="sec-head">
           <div>
-            <h2 className="h2">{title}</h2>
+            <h2 className="h2">{t(title)}</h2>
             <p>{blurb}</p>
           </div>
-          <a href={'#/' + href} className="btn ghost sm">View all{items.length > 4 ? ' (' + items.length + ')' : ''}</a>
+          <a href={'/' + href} className="btn ghost sm">{t('View all')}{items.length > 4 ? ' (' + items.length + ')' : ''}</a>
         </Reveal>
         <Reveal stagger className="pgrid shelf">{items.slice(0, 4).map((p) => <ProductCard key={p.id} p={p} />)}</Reveal>
       </div>
@@ -69,17 +72,18 @@ const PROMISES: { ic: 'leaf' | 'hand' | 'palette' | 'gift'; h: string; t: string
 const TILE_TINTS = ['linear-gradient(150deg,#F7E4E7,#EBC9D0)', 'linear-gradient(150deg,#E6ECF6,#C9D6EA)', 'linear-gradient(150deg,#F8EDD0,#EBD39B)', 'linear-gradient(150deg,#E4EEDD,#C5D8BC)'];
 
 export function Home() {
-  const { reviews, categories, liveSeasons, active, shelf } = useApp();
+  const t = useT();
+  const { reviews, categories, liveSeasons, active, shelf, settings } = useApp();
   return (
     <>
       <Hero />
 
-      <section className="promise" aria-label="Why Ember & Eve">
+      <section className="promise" aria-label={t('Why Ember & Eve')}>
         <Reveal stagger className="promise-grid">
           {PROMISES.map((p) => (
             <div key={p.h} className="promise-item">
               <span className="ic"><Ico n={p.ic} /></span>
-              <div><b>{p.h}</b><span>{p.t}</span></div>
+              <div><b>{t(p.h)}</b><span>{t(p.t)}</span></div>
             </div>
           ))}
         </Reveal>
@@ -92,21 +96,21 @@ export function Home() {
       {categories.length > 0 && (
         <section className="page" style={{ paddingTop: 80 }}>
           <Reveal className="sec-head center-head">
-            <span className="eyebrow">Our collection</span>
-            <h2 className="h2">Find your kind of calm</h2>
-            <p>Sculpted moulds, poured glass and classic jars.</p>
+            <span className="eyebrow">{t('Our collection')}</span>
+            <h2 className="h2">{t('Find your kind of calm')}</h2>
+            <p>{t('Sculpted moulds, poured glass and classic jars.')}</p>
           </Reveal>
           <Reveal stagger className="cat-tiles">
             {categories.map((c, i) => {
               const n = active.filter((p) => p.cat === c.id).length;
               return (
-                <a key={c.id} href={'#/shop?cat=' + c.id} className="cat-tile">
-                  <div className="art" style={{ background: TILE_TINTS[i % 4], color: 'var(--brown)' }}><Ico n="flame" /></div>
+                <a key={c.id} href={'/shop?cat=' + c.id} className="cat-tile">
+                  <div className="art" style={{ background: TILE_TINTS[i % 4], color: 'var(--brown)' }}>{c.image ? <img src={c.image} alt={c.name} loading="lazy" /> : <Ico n="flame" />}</div>
                   <span className="go"><Ico n="arrow" /></span>
                   <div className="body">
                     <div className="name">{c.name}</div>
                     <div className="muted" style={{ margin: '6px 0 8px', lineHeight: 1.5 }}>{c.blurb}</div>
-                    <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--brown)' }}>{n} {n === 1 ? 'candle' : 'candles'}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--brown)' }}>{n} {n === 1 ? t('candle') : t('candles')}</div>
                   </div>
                 </a>
               );
@@ -117,7 +121,7 @@ export function Home() {
 
       <ColourStudio />
 
-      {SHELVES.map((sh, i) => <ShelfSection key={sh.id} title={sh.title} blurb={sh.blurb} href={'shop?shelf=' + sh.id} items={shelf(sh.id)} tinted={i % 2 === 1} />)}
+      {SHELVES.map((sh, i) => <ShelfSection key={sh.id} title={t(sh.title)} blurb={t(sh.blurb)} href={'shop?shelf=' + sh.id} items={shelf(sh.id)} tinted={i % 2 === 1} />)}
 
       <section>
         <div className="story">
@@ -131,17 +135,17 @@ export function Home() {
             </svg>
           </Reveal>
           <Reveal delay={120}>
-            <span className="eyebrow">Our craft</span>
-            <h2 className="h2">Poured slowly, by hand</h2>
+            <span className="eyebrow">{t('Our craft')}</span>
+            <h2 className="h2">{t('Poured slowly, by hand')}</h2>
             <p className="lede" style={{ margin: '16px 0 0' }}>
-              Every Ember &amp; Eve candle is made in Sri Lanka, in small batches, from high quality soy wax. We pour, colour and finish each one ourselves, so it arrives the way you imagined it.
+              {t('Every Ember & Eve candle is made in Sri Lanka, in small batches, from high quality soy wax. We pour, colour and finish each one ourselves, so it arrives the way you imagined it.')}
             </p>
             <ul>
-              <li>Non-toxic soy wax and lead-free cotton wicks</li>
-              <li>Your choice of colour, scent or no scent at all</li>
-              <li>Sticker messages and gift boxes, made just for you</li>
+              <li>{t('Non-toxic soy wax and lead-free cotton wicks')}</li>
+              <li>{t('Your choice of colour, scent or no scent at all')}</li>
+              <li>{t('Sticker messages and gift boxes, made just for you')}</li>
             </ul>
-            <a href="#/about" className="btn ghost">Read our story</a>
+            <a href="/about" className="btn ghost">{t('Read our story')}</a>
           </Reveal>
         </div>
       </section>
@@ -150,26 +154,26 @@ export function Home() {
         <Embers n={16} />
         <Reveal className="inner">
           <div>
-            <span className="eyebrow" style={{ color: '#E6C79A' }}>Gift something thoughtful</span>
-            <h2 className="h2">Create your own gift box</h2>
-            <p>Pick the candles, choose every colour, add a personal note, and we wrap it all up beautifully.</p>
+            <span className="eyebrow" style={{ color: '#E6C79A' }}>{t('Gift something thoughtful')}</span>
+            <h2 className="h2">{t('Create your own gift box')}</h2>
+            <p>{t('Pick the candles, choose every colour, add a personal note, and we wrap it all up beautifully.')}</p>
           </div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <a href="#/gifts" className="btn light">Build a gift box</a>
-            <a href="#/finder" className="btn ghost-light">Find my colour</a>
+            <a href="/gifts" className="btn light">{t('Build a gift box')}</a>
+            <a href="/finder" className="btn ghost-light">{t('Find my colour')}</a>
           </div>
         </Reveal>
       </section>
 
       <section id="gallery" className="page-72">
         <Reveal className="sec-head center-head">
-          <span className="eyebrow">From the studio</span>
-          <h2 className="h2">Little moments, lit</h2>
+          <span className="eyebrow">{t('From the studio')}</span>
+          <h2 className="h2">{t('Little moments, lit')}</h2>
         </Reveal>
         <Reveal stagger style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 24 }}>
-          {GALLERY.map((g) => (
-            <Ph key={g.t} tint={g.tint} label={g.t} ratio={g.ratio} style={{ border: '1px solid var(--line)' }} className="gallery-tile" />
-          ))}
+          {settings.gallery.length > 0
+            ? settings.gallery.map((u, i) => <img key={u + i} src={u} alt={'Ember & Eve candles, photo ' + (i + 1)} loading="lazy" className="gallery-photo" />)
+            : GALLERY.map((g) => <Ph key={g.t} tint={g.tint} label={g.t} ratio={g.ratio} style={{ border: '1px solid var(--line)' }} className="gallery-tile" />)}
         </Reveal>
       </section>
 
@@ -177,8 +181,8 @@ export function Home() {
         <section id="reviews" className="band-white">
           <div className="page-72">
             <Reveal className="sec-head center-head">
-              <span className="eyebrow">Kind words</span>
-              <h2 className="h2">Loved by our customers</h2>
+              <span className="eyebrow">{t('Kind words')}</span>
+              <h2 className="h2">{t('Loved by our customers')}</h2>
             </Reveal>
             <Reveal stagger style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 24 }}>
               {reviews.slice(0, 3).map((r) => (
@@ -195,9 +199,9 @@ export function Home() {
 
       <section className="news-band">
         <Reveal className="inner">
-          <span className="eyebrow">The Ember &amp; Eve circle</span>
-          <h2 className="h2">Be the first to know</h2>
-          <p className="lede" style={{ margin: '12px 0 0' }}>New collections, seasonal candles and the occasional offer. Never more than once a month.</p>
+          <span className="eyebrow">{t('The Ember & Eve circle')}</span>
+          <h2 className="h2">{t('Be the first to know')}</h2>
+          <p className="lede" style={{ margin: '12px 0 0' }}>{t('New collections, seasonal candles and the occasional offer. Never more than once a month.')}</p>
           <Newsletter />
         </Reveal>
       </section>
