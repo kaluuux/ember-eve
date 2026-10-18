@@ -76,5 +76,5 @@ export function Stepper({ qty, onDec, onInc, small }: { qty: number; onDec: () =
 }
 
 export const Section = ({ children, narrow }: { children: ReactNode; narrow?: number }) => (
-  <section className="narrow" style={narrow ? { maxWidth: narrow } : { maxWidth: 1120 }}>{children}</section>
+  <section className="narrow" style={narrow ? { maxWidth: narrow } : { maxWidth: 'var(--wrap)' }}>{children}</section>
 );

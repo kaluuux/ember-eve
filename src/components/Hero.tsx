@@ -82,7 +82,7 @@ export function Hero() {
         <div style={{ position: 'absolute', left: 0, top: 64, height: 2, width: '100%', background: 'rgba(255,255,255,0.08)' }}>
           <div data-bar style={{ height: 2, width: '0%', background: '#A67C52' }} />
         </div>
-        <div style={{ maxWidth: 1120, width: '100%', margin: '0 auto', padding: '0 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 32, alignItems: 'center', position: 'relative' }}>
+        <div style={{ maxWidth: 'var(--wrap)', width: '100%', margin: '0 auto', padding: '0 24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 32, alignItems: 'center', position: 'relative' }}>
           <div style={{ position: 'relative', zIndex: 2 }}>
             <div className="hero-eyebrow">{t('Light up your little moments')}</div>
             <h1 className="hero-title">{t('Light something that feels like home.')}</h1>
