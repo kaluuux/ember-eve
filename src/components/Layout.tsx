@@ -14,8 +14,13 @@ function NavDropdown({ label, active, children }: { label: string; active?: bool
   const t = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  // The menu hangs off the header, not the scrolling nav row, so a narrow screen cannot clip it.
+  const [pos, setPos] = useState({ left: 0, top: 0 });
   useEffect(() => {
     if (!open) return;
+    const btn = ref.current?.querySelector('button')?.getBoundingClientRect();
+    const hdr = ref.current?.closest('.header')?.getBoundingClientRect();
+    if (btn && hdr) setPos({ left: btn.left - hdr.left - 12, top: btn.bottom - hdr.top });
     const away = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('mousedown', away);
@@ -25,7 +30,7 @@ function NavDropdown({ label, active, children }: { label: string; active?: bool
   return (
     <div className="dd" ref={ref} onMouseEnter={() => matchMedia('(hover: hover)').matches && setOpen(true)} onMouseLeave={() => matchMedia('(hover: hover)').matches && setOpen(false)}>
       <button type="button" className={'dd-btn' + (active ? ' on' : '')} aria-current={active ? 'page' : undefined} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>{label} <span aria-hidden="true" style={{ fontSize: 10 }}>▾</span></button>
-      {open && <div className="dd-menu" role="menu" onClick={() => setOpen(false)}>{children}</div>}
+      {open && <div className="dd-menu" role="menu" style={{ left: pos.left, top: pos.top }} onClick={() => setOpen(false)}>{children}</div>}
     </div>
   );
 }

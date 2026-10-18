@@ -403,3 +403,7 @@ html[lang='si'] .hero-title { font-size: clamp(32px, 4.2vw, 52px); line-height: 
 html[lang='ta'] .hero-title { font-size: clamp(32px, 4.4vw, 54px); line-height: 1.18; letter-spacing: 0; }
 html[lang='si'] .h1, html[lang='ta'] .h1 { line-height: 1.25; }
 .lang-switch button { white-space: nowrap; }
+
+/* the dropdown is positioned against the header so the scrolling nav row never clips it */
+.header .dd { position: static; }
+.header .dd-menu { position: absolute; }
