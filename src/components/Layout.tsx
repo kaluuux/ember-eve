@@ -9,6 +9,9 @@ import { FloatingActions, Ico, Newsletter } from './Flair';
 import { safeUrl } from '../store';
 import { LANGS, setLang, useLang, useT } from '../i18n';
 
+/** The cookie notice is switched off for now. Set this to true to bring it back. */
+const SHOW_COOKIE_BANNER = false;
+
 /** Click (or hover on desktop) to open; closes on outside click, Escape, or choosing a link. */
 function NavDropdown({ label, active, children }: { label: string; active?: boolean; children: ReactNode }) {
   const t = useT();
@@ -195,7 +198,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <CartDrawer />
       <QuickViewModal />
       {toast && <div className="toast" role="status">{t(toast)}</div>}
-      {!cookieAccepted && (
+      {SHOW_COOKIE_BANNER && !cookieAccepted && (
         <div className="cookie" role="dialog" aria-label={t('Cookies')}>
           <div style={{ flex: 1, minWidth: 200, fontSize: 14, lineHeight: '22px' }}>{t('We use cookies to keep your basket and sign-in.')}{' '}<a href="/privacy">{t('Privacy Policy')}</a></div>
           <button type="button" className="btn sm" onClick={acceptCookie}>{t('Accept')}</button>
