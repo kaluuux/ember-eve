@@ -144,10 +144,12 @@ export function Doc({ name }: { name: string }) {
       { h: 'Safety', t: 'Never leave a burning candle unattended. Keep away from children, pets and draughts. Stop burning when 1cm of wax remains.' },
     ] },
     privacy: { title: 'Privacy Policy', sections: [
-      { h: 'What we collect', t: 'Your name, email, phone number, delivery address, order history, and any payment receipt you upload. We use it only to take payment, make and deliver your order, and contact you about it.' },
-      { h: 'Who sees it', t: 'Only our team. Your details are stored with our hosting provider, Supabase, and we never sell them.' },
-      { h: 'Cookies', t: 'We store your basket and sign-in on your device. We do not run advertising trackers.' },
-      { h: 'Your rights', t: 'You can ask us to export or delete your data at any time by contacting ' + (st.email || 'us') + '.' },
+      { h: 'Information We Collect', t: 'We collect your name, email address, phone number, delivery address, order details, and payment verification receipts. When you choose to sign in using Google, we access your basic Google profile information (name and email address) to authenticate your account.' },
+      { h: 'How We Use Your Information', t: 'We use your information exclusively to create and manage your customer account, process orders, deliver purchases, provide order status updates, and respond to your customer service enquiries. We do not use your personal information or Google user data for advertising.' },
+      { h: 'Data Storage and Security', t: 'Your data is securely stored in encrypted cloud databases provided by Supabase. We implement strict access controls and security measures to protect your personal details against unauthorized access.' },
+      { h: 'Data Sharing and Disclosure', t: 'We never sell, rent, trade, or share your personal information or Google account data with third parties or advertisers. We only share information with courier partners strictly to the extent required to deliver your orders.' },
+      { h: 'Data Retention and Account Deletion', t: 'We retain your personal data only for as long as your account is active or needed to provide services. You have the right to request access to your data or request complete account and data deletion at any time by contacting us at ' + (st.email || 'support@ember-eve.com') + '.' },
+      { h: 'Cookies and Local Storage', t: 'We only use essential local storage and session tokens to remember your shopping basket and sign-in status across visits. We do not use third-party tracking or advertising cookies.' },
     ] },
     terms: { title: 'Terms of Sale', sections: [
       { h: 'Orders', t: 'An order is confirmed once we have checked and approved your payment. We may cancel and refund an order if an item cannot be made or is out of stock.' },
