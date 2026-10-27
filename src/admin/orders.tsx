@@ -182,7 +182,7 @@ function OrderDetail({ o, settings, flash }: { o: Order; settings: Settings; fla
     'Thank you for shopping with us.',
   ].join('\n');
   const [copied, setCopied] = useState(false);
-  const copyTimer = useRef<ReturnType<typeof setTimeout>>();
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const copyMsg = () => {
     void navigator.clipboard.writeText(waMsg);
     setCopied(true);
