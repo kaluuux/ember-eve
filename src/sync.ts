@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { tr } from './i18n';
 import { sb, remote } from './remote';
-import { clearLocal, registerPush, setLocal, starterCatalog } from './store';
+import { clearLocal, get, registerPush, setLocal, starterCatalog } from './store';
 import { go } from './router';
 import type { Address, Discount, Message, Order, Product, Review, SavedAddress, Session } from './types';
 
@@ -200,7 +200,36 @@ function pushKey(k: string, v: unknown) {
       if (k === 'products') await pushProducts(v as Product[]);
       else if ((CATALOG_KEYS as readonly string[]).includes(k) || k === 'discounts') await upsertKv(k, v);
       else if (k === 'orders') await pushOrders(v as Order[]);
-      else if (k === 'reviews') await pushRows('reviews', v as Review[], (r) => r.id, (r) => { const { id, approved, ...data } = r; void id; return { data, approved }; }, last.reviews, false);
+      else if (k === 'reviews') {
+        const list = v as Review[];
+        // Delete server rows that were removed locally
+        const ids = new Set(list.map((r) => r.id));
+        for (const k of [...last.reviews.keys()]) {
+          if (ids.has(k)) continue;
+          const { error } = await sb!.from('reviews').delete().eq('id', k);
+          if (error) throw error;
+          last.reviews.delete(k);
+        }
+        for (const r of list) {
+          const json = JSON.stringify(r);
+          if (last.reviews.get(r.id) === json) continue;
+          if (!last.reviews.has(r.id)) {
+            // New review only exists locally — insert without id (Postgres uses generated always as identity)
+            const { data: inserted, error } = await sb!.from('reviews').insert({ data: (({ id: _id, approved: _ap, ...d }) => d)(r), approved: r.approved }).select('id').single();
+            if (error) throw error;
+            // Update local list to use the real server-assigned id
+            const serverList = get<Review[]>('reviews', []).map((x) => x.id === r.id ? { ...x, id: (inserted as { id: number }).id } : x);
+            setLocal('reviews', serverList);
+            last.reviews.set((inserted as { id: number }).id, JSON.stringify({ ...r, id: (inserted as { id: number }).id }));
+          } else {
+            // Existing server row — UPDATE only, never supply id in the payload
+            const { id, approved, ...data } = r;
+            const { error } = await sb!.from('reviews').update({ data, approved }).eq('id', id);
+            if (error) throw error;
+            last.reviews.set(r.id, json);
+          }
+        }
+      }
       else if (k === 'messages') await pushRows('messages', v as Message[], (m) => m.id, (m) => { const { id, read, ...data } = m; void id; return { data, is_read: read }; }, last.messages, false);
     } catch (e) {
       fail('Could not save to the server: ' + ((e as { message?: string }).message ?? 'unknown error') + '. Refresh and try again.');

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { EMPTY, fmtDate, get, money, set, useStored, withDefaults, DEFAULT_SETTINGS } from '../store';
 import { go } from '../router';
 import { remote } from '../remote';
@@ -167,6 +167,29 @@ function OrderDetail({ o, settings, flash }: { o: Order; settings: Settings; fla
   const pay = payOf(o);
   const hello = 'Hi ' + (o.first || o.name.split(' ')[0]) + ', this is ' + settings.shop + ' about your order ' + o.id + '. ';
 
+  /** Full order confirmation message the admin can copy-paste into WhatsApp */
+  const waMsg = [
+    'Dear ' + (o.first || o.name.split(' ')[0]) + ',',
+    '',
+    'Thank you for your order with ' + settings.shop + '.',
+    '',
+    'Order Reference: ' + o.id,
+    'Date: ' + new Date(o.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+    '',
+    'You may view your invoice here: ' + window.location.origin + '/invoice/' + o.id,
+    '',
+    'We will notify you once your order has been dispatched.',
+    'Thank you for shopping with us.',
+  ].join('\n');
+  const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout>>();
+  const copyMsg = () => {
+    void navigator.clipboard.writeText(waMsg);
+    setCopied(true);
+    clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <aside className="panel detail" aria-label={'Order ' + o.id}>
       <div className="row-between">
@@ -194,11 +217,22 @@ function OrderDetail({ o, settings, flash }: { o: Order; settings: Settings; fla
         <h4>Customer</h4>
         <b>{o.name}</b><br />{!staff && <>{o.email}<br /></>}{o.phone}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-          {o.phone && <a className="btn-xs" href={waLink(o.phone, hello)} target="_blank" rel="noreferrer">WhatsApp customer</a>}
+          {o.phone && <a className="btn-xs" href={waLink(o.phone, waMsg)} target="_blank" rel="noreferrer">WhatsApp customer</a>}
           {o.phone && <a className="btn-xs" href={'tel:' + o.phone}>Call</a>}
           {!staff && <a className="btn-xs" href={'/invoice/' + o.id + '?back=admin/orders%3Fsel%3D' + o.id} target="_blank" rel="noreferrer">Invoice</a>}
           {!staff && <a className="btn-xs" href={'mailto:' + o.email + '?subject=' + encodeURIComponent('Your order ' + o.id)}>Email</a>}
         </div>
+        {o.phone && (
+          <div className="notebox" style={{ background: 'var(--a-brand-soft)', marginTop: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <b style={{ fontSize: 12 }}>📋 WhatsApp Message</b>
+              <button type="button" className="btn-xs" onClick={copyMsg} style={{ minWidth: 70 }}>
+                {copied ? '✓ Copied!' : 'Copy'}
+              </button>
+            </div>
+            <pre style={{ margin: 0, fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'inherit', color: 'var(--text2)', lineHeight: 1.6 }}>{waMsg}</pre>
+          </div>
+        )}
       </div>
 
       <div className="block">
