@@ -8,6 +8,7 @@ import { QuickViewModal } from './QuickViewModal';
 import { FloatingActions, Ico, Newsletter } from './Flair';
 import { safeUrl } from '../store';
 import { LANGS, setLang, useLang, useT } from '../i18n';
+import { DevNotice } from './DevNotice';
 
 /** The cookie notice is switched off for now. Set this to true to bring it back. */
 const SHOW_COOKIE_BANNER = false;
@@ -194,6 +195,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </footer>
       </div>
 
+      <DevNotice />
       <FloatingActions />
       <CartDrawer />
       <QuickViewModal />

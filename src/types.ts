@@ -54,6 +54,10 @@ export interface BankAccount { id: string; bank: string; branch: string; name: s
 
 export interface Settings {
   shop: string;
+  /** Show visitors a "still being built" notice */
+  devNotice: boolean;
+  /** Wording of that notice; empty uses the standard text */
+  devNoticeText: string;
   email: string;
   standard: number;
   express: number;

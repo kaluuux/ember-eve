@@ -12,6 +12,11 @@ export async function loadData() {
     const rows = await r.json();
     const d = {};
     rows.forEach((x) => { d[x.key] = x.value; });
+    // approved reviews (public by the database rules) feed the star ratings in search results
+    try {
+      const rv = await fetch(`${url}/rest/v1/reviews?select=data&approved=eq.true&order=id.desc&limit=500`, { headers: { apikey: key, Authorization: 'Bearer ' + key } });
+      d.reviews = rv.ok ? (await rv.json()).map((x) => x.data).filter(Boolean) : [];
+    } catch { d.reviews = []; }
     cache = { at: Date.now(), data: d };
     return d;
   } catch {
