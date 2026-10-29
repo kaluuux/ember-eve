@@ -107,7 +107,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <div className="topbar">{t('Free delivery over {amount}', { amount: money(settings.freeOver) })}<span className="hide-sm"> · {t('Hand-poured soy wax candles, made in Sri Lanka')}</span><LangSwitch className="topbar-lang" /></div>
         <header ref={headerRef} className={'header' + (scrolled ? ' scrolled' : '') + (menu ? ' menu-open' : '')}>
           <a href="/" className="brand">
-            <img src="/logo.png" alt="" width={42} height={42} style={{ borderRadius: 9999 }} />
+            <img src="/logo-sm.webp" alt="" width={42} height={42} style={{ borderRadius: 9999 }} />
             <span>{t('Ember & Eve')}</span>
           </a>
           <nav className="nav" aria-label={t('Main')}>

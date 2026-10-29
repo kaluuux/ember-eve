@@ -1,7 +1,4 @@
 import { useCallback, useSyncExternalStore } from 'react';
-import { SI } from './lang/si';
-import { TA } from './lang/ta';
-
 /**
  * Sinhala and Tamil for the storefront. The English text is the key, so a string that has no translation
  * simply shows in English. Placeholders look like {n} and are filled from the second argument.
@@ -13,7 +10,16 @@ export const LANGS: { id: Lang; label: string; short: string }[] = [
   { id: 'si', label: 'සිංහල', short: 'සි' },
   { id: 'ta', label: 'தமிழ்', short: 'த' },
 ];
-const DICT: Record<Lang, Record<string, string>> = { en: {}, si: SI, ta: TA };
+// The Sinhala and Tamil word lists are only downloaded when someone actually chooses that language.
+const DICT: Record<Lang, Record<string, string>> = { en: {}, si: {}, ta: {} };
+const loaded: Record<Lang, boolean> = { en: true, si: false, ta: false };
+export async function loadLang(l: Lang): Promise<void> {
+  if (loaded[l]) return;
+  try {
+    DICT[l] = l === 'si' ? (await import('./lang/si')).SI : (await import('./lang/ta')).TA;
+    loaded[l] = true;
+  } catch { /* offline or blocked: stay in English */ }
+}
 const KEY = 'ee_lang';
 const EVT = 'ee-lang';
 
@@ -26,9 +32,12 @@ const read = (): Lang => {
 };
 
 export function setLang(l: Lang) {
-  try { localStorage.setItem(KEY, l); } catch { /* ignore */ }
-  document.documentElement.lang = l;
-  window.dispatchEvent(new Event(EVT));
+  // load the words first so the page switches in one go, with no flash of English
+  void loadLang(l).then(() => {
+    try { localStorage.setItem(KEY, l); } catch { /* ignore */ }
+    document.documentElement.lang = l;
+    window.dispatchEvent(new Event(EVT));
+  });
 }
 
 const sub = (cb: () => void) => { window.addEventListener(EVT, cb); return () => window.removeEventListener(EVT, cb); };
@@ -49,5 +58,8 @@ export function useT() {
   }, [lang]);
 }
 
-/** Keep <html lang> right on first load. */
-export function initLang() { document.documentElement.lang = read(); }
+/** On first load: set <html lang> and fetch the saved language's words (resolves at once for English). */
+export function initLang(): Promise<void> {
+  document.documentElement.lang = read();
+  return loadLang(read());
+}

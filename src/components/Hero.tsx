@@ -48,29 +48,33 @@ export function Hero() {
     const steps = r.querySelectorAll<HTMLElement>('[data-step]');
     const smalls = qa('[data-sfs]'), halos = qa('[data-sglow]');
 
-    const onScroll = () => {
-      const stage = r.firstElementChild as HTMLElement;
-      const off = parseFloat(getComputedStyle(stage).top) || 0;
-      const total = r.offsetHeight - stage.offsetHeight;
-      const p = total > 0 ? clamp01(0, 1, (off - r.getBoundingClientRect().top) / total) : 0;
+    // The scene geometry is measured when the window or page changes; the scroll position itself is read live each frame.
+    const svg = r.querySelector('svg[data-scene]') as SVGSVGElement;
+    let vbY = 0, vbH = 600, artH = 560, lastP = -1, raf = 0;
+    const measure = () => {
+      const vb = svg.viewBox.baseVal;
+      vbY = vb.y; vbH = vb.height;
+      artH = (glow.parentElement as HTMLElement).offsetHeight;
+    };
+
+    const draw = (p: number) => {
       const ign = ease(clamp01(0.1, 0.28, p)), grow = ease(clamp01(0.28, 0.95, p)), em = clamp01(0.02, 0.1, p) * (1 - ign);
-      const top = 372 + 60 * grow, fy = top - 22;
+      const topY = 372 + 60 * grow, fy = topY - 22;
       const sv = [0.36, 0.46, 0.56, 0.66].map((s0) => ease(clamp01(s0, s0 + 0.08, p)));
       smalls.forEach((n, i) => n.setAttribute('transform', 'scale(' + (sv[i] * 0.42).toFixed(3) + ')'));
       halos.forEach((n, i) => n.setAttribute('opacity', String(sv[i] * 0.9)));
-      wax.setAttribute('y', String(top)); wax.setAttribute('height', String(512 - top));
+      wax.setAttribute('y', String(topY)); wax.setAttribute('height', String(512 - topY));
       tint.setAttribute('opacity', String(ign * (0.4 + 0.6 * grow)));
       r.style.background = `rgb(${mix(27, 58, grow)},${mix(29, 42, grow)},${mix(31, 30, grow)})`;
-      rim.setAttribute('cy', String(top));
-      liq.setAttribute('cy', String(top)); liq.setAttribute('rx', String(20 + 58 * Math.min(1, ign * 0.4 + grow))); liq.setAttribute('opacity', String(ign));
-      wick.setAttribute('y1', String(top)); wick.setAttribute('y2', String(fy));
+      rim.setAttribute('cy', String(topY));
+      liq.setAttribute('cy', String(topY)); liq.setAttribute('rx', String(20 + 58 * Math.min(1, ign * 0.4 + grow))); liq.setAttribute('opacity', String(ign));
+      wick.setAttribute('y1', String(topY)); wick.setAttribute('y2', String(fy));
       ember.setAttribute('cy', String(fy)); ember.setAttribute('opacity', String(em));
       fpos.setAttribute('transform', `translate(260 ${fy})`); fpos.setAttribute('opacity', String(ign));
       fscale.setAttribute('transform', 'scale(' + (ign * 0.85 * (1 + 0.15 * grow)).toFixed(3) + ')');
       glow.style.opacity = String(ign * (0.55 + 0.45 * grow));
-      const vb = (r.querySelector('svg[data-scene]') as SVGSVGElement).viewBox.baseVal;
-      glow.style.top = ((fy - 35 - vb.y) / vb.height) * 100 + '%';
-      glow.style.transform = 'scale(' + (0.2 + 0.9 * ign * (0.6 + 0.4 * grow)).toFixed(3) + ')';
+      // moved with a transform (cheap, handled by the graphics chip) instead of animating "top"
+      glow.style.transform = 'translateY(' + (((fy - 35 - vbY) / vbH) * artH).toFixed(1) + 'px) scale(' + (0.2 + 0.9 * ign * (0.6 + 0.4 * grow)).toFixed(3) + ')';
       pool.setAttribute('opacity', String(ign * (0.5 + 0.5 * grow)));
       bar.style.width = p * 100 + '%';
       hint.style.opacity = String(Math.max(0, 1 - p * 8));
@@ -78,14 +82,42 @@ export function Hero() {
       steps.forEach((e, i) => { e.style.color = i === act ? '#fff' : '#9AA0A3'; });
     };
 
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll);
-    onScroll();
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onScroll);
+    // At most one redraw per screen frame, and none when the progress has not changed.
+    const frame = () => {
+      raf = 0;
+      // reads first, writes after (in draw), so the browser never has to recalculate layout in the middle of a frame
+      const stage = r.firstElementChild as HTMLElement;
+      const off = parseFloat(getComputedStyle(stage).top) || 0;
+      const t = r.offsetHeight - stage.offsetHeight;
+      const p = t > 0 ? clamp01(0, 1, (off - r.getBoundingClientRect().top) / t) : 0;
+      if (p === lastP) return;
+      lastP = p;
+      draw(p);
     };
-  }, []);
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(frame); };
+    const onResize = () => { measure(); lastP = -1; onScroll(); };
+    const onLoad = () => { measure(); lastP = -1; onScroll(); };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onResize);
+    window.addEventListener('load', onLoad);
+    // the art box changing size (rotation, fonts, language) changes where the glow sits: measure again
+    // flames and sparks keep flickering for ever; pause them whenever the hero is off screen so the rest of the page scrolls lightly
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) r.removeAttribute('data-off'); else r.setAttribute('data-off', ''); }, { rootMargin: '120px' });
+    io.observe(r);
+    const ro = new ResizeObserver(onLoad);
+    ro.observe(glow.parentElement as HTMLElement);
+    measure();
+    frame();
+    return () => {
+      ro.disconnect();
+      io.disconnect();
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('load', onLoad);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [phone]);
 
   return (
     <section ref={ref} style={{ position: 'relative', height: '300vh', background: '#1B1D1F', color: '#fff' }}>
@@ -114,7 +146,7 @@ export function Hero() {
           <div className="hero-art" style={phone ? { aspectRatio: '460 / 410' } : undefined}>
             <div
               data-glow
-              style={{ position: 'absolute', left: '50%', top: '50%', width: 1600, height: 1600, margin: '-800px 0 0 -800px', borderRadius: '50%', background: 'radial-gradient(circle,rgba(255,190,100,0.5) 0%,rgba(214,150,80,0.22) 22%,rgba(166,124,82,0) 55%)', opacity: 0, transform: 'scale(0.2)', pointerEvents: 'none' }}
+              style={{ position: 'absolute', left: '50%', top: 0, willChange: 'transform, opacity', width: 1600, height: 1600, margin: '-800px 0 0 -800px', borderRadius: '50%', background: 'radial-gradient(circle,rgba(255,190,100,0.5) 0%,rgba(214,150,80,0.22) 22%,rgba(166,124,82,0) 55%)', opacity: 0, transform: 'scale(0.2)', pointerEvents: 'none' }}
             />
             <svg data-scene viewBox={phone ? '30 190 460 410' : '0 0 520 600'} style={{ position: 'relative', width: '100%', height: '100%', overflow: 'visible' }} role="img" aria-label={t('Glass jar candle and shaped candles lighting as you scroll')}>
               <defs>

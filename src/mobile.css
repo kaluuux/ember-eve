@@ -140,3 +140,6 @@
 @media (max-width: 860px) {
   .admin-shell .orders-layout .table th:nth-child(3), .admin-shell .orders-layout .table td:nth-child(3) { display: none; }
 }
+
+/* ---------------------------------------------------------------- hero: lighter on the browser */
+section[data-off] svg *, section[data-off] [data-glow] { animation-play-state: paused !important; }
