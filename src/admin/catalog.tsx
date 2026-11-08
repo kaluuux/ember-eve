@@ -225,7 +225,7 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
       if (!g.label.trim() || !g.options.length) return setErr('Every option group needs a name and at least one choice.');
       if (g.options.some((o) => !o.label.trim())) return setErr('Every choice needs a label.');
     }
-    const clean: Product = { ...d, id: d.id || Date.now(), name: d.name.trim(), base: Math.round(d.base), custom: d.colors && d.custom, salePrice: d.salePrice && d.salePrice < start ? d.salePrice : undefined };
+    const clean: Product = { ...d, id: d.id || Date.now(), name: d.name.trim(), base: Math.round(d.base), custom: d.colors && d.custom, salePrice: d.salePrice && d.salePrice < start ? d.salePrice : undefined, salePct: saleMode === 'price' && !(d.salePrice && d.salePrice < start) ? 0 : d.salePct };
     const all = get<Product[]>('products', []);
     set('products', d.id ? all.map((x) => (x.id === d.id ? clean : x)) : all.concat(clean));
     const cv = cost.trim() === '' ? null : Math.max(0, Math.round(Number(cost) || 0));
@@ -262,7 +262,7 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
             </div>
             {saleMode === 'pct'
               ? <input className="input" type="number" min={0} max={90} step="any" aria-label="Sale percent" placeholder="e.g. 15" value={d.salePct || ''} onChange={(e) => up({ salePct: Math.min(90, Math.max(0, Number(e.target.value) || 0)) })} />
-              : <input className="input" type="number" min={0} aria-label="Sale price in rupees" placeholder={'e.g. ' + Math.round(start * 0.85)} value={d.salePrice || ''} onChange={(e) => up({ salePrice: e.target.value === '' ? undefined : Math.max(0, Math.round(Number(e.target.value) || 0)) })} />}
+              : <input className="input" type="number" min={0} aria-label="Sale price in rupees" placeholder={'e.g. ' + Math.round(start * 0.85)} value={d.salePrice || ''} onChange={(e) => { const v = Math.max(0, Math.round(Number(e.target.value) || 0)); up(v > 0 ? { salePrice: v } : { salePrice: undefined, salePct: 0 }); }} />}
             <span style={{ fontWeight: 400, fontSize: 12 }}>
               {saleMode === 'price' && d.salePrice && d.salePrice >= start ? 'The sale price must be lower than ' + money(start) + '.' : d.salePct > 0 ? (saleMode === 'price' ? money(d.salePrice ?? 0) + ' instead of ' + money(start) + ' (' + pctText(d.salePct) + '% off)' : money(Math.round(start * (1 - d.salePct / 100))) + ' instead of ' + money(start)) : 'No sale. Usual price ' + money(start) + '.'}
             </span>
