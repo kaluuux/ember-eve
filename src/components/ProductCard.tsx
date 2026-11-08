@@ -30,12 +30,12 @@ export function ProductCard({ p }: { p: Product }) {
       <div className="thumb-wrap">
         <a href={href} className={'ph stripe thumb' + (photo ? ' has-img' : '')} style={{ backgroundColor: soft(hex) }} aria-label={p.name}>
           <span className="badge-row">
-            {p.salePct > 0 && <span className="tagpill sale">-{pctText(p.salePct)}%</span>}
             {isNew && <span className="tagpill new">{t('New')}</span>}
             {sold && <span className="badge">{t('Sold out')}</span>}
           </span>
           {photo ? <><img className="thumb-img" src={photo} alt={p.name + ' handmade soy wax candle'} loading="lazy" />{photo2 && <img className="thumb-img alt" src={photo2} alt="" loading="lazy" />}</> : <span>{t('Image:')}{' '}{p.name}</span>}
         </a>
+        {p.salePct > 0 && <span className="sale-bubble" aria-label={pctText(p.salePct) + '% off'}>{pctText(p.salePct)}% {t('OFF')}</span>}
         <button type="button" className="heart" aria-pressed={saved} aria-label={saved ? t('Remove from saved') : 'Save ' + p.name} onClick={() => toggleWish(p.id)}><Ico n="heart" /></button>
       </div>
       <div className="pc-info" style={{ padding: '0 4px', display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -53,7 +53,7 @@ export function ProductCard({ p }: { p: Product }) {
         </div>
       )}
       <div className="foot">
-        <div className="pc-price" style={{ fontSize: 16, fontWeight: 600 }}>
+        <div className="pc-price" style={{ fontSize: 16, fontWeight: 600, ...(p.salePct > 0 ? { color: '#C62828' } : {}) }}>
           {t('From')}{' '}{money(from)}{p.salePct > 0 && <s style={{ marginLeft: 8, fontSize: 13, fontWeight: 400, color: 'var(--muted2)' }}>{money(was)}</s>}
         </div>
         <div className="acts">

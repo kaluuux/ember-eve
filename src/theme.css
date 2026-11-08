@@ -456,3 +456,11 @@ html[lang='si'] .header .dd-btn, html[lang='ta'] .header .dd-btn { font-size: 13
 .season-bar:hover { filter: brightness(1.06); }
 .season-bar .go { font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 @media (max-width: 480px) { .cd-box { min-width: 64px; } .cd-box b { font-size: 24px; } .countdown { gap: 6px; } }
+
+/* red sale label on product cards */
+.sale-bubble { position: absolute; left: 10px; bottom: 10px; z-index: 3; background: #C62828; color: #fff; font: 700 12px/1 Inter, sans-serif; letter-spacing: 0.02em; padding: 6px 10px; border-radius: 3px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25); pointer-events: none; white-space: nowrap; }
+@media (max-width: 640px) { .sale-bubble { left: 7px; bottom: 7px; font-size: 11px; padding: 5px 8px; } }
+
+/* On Sale nav link */
+.header .nav a.sale-link, .header .mmenu a.sale-link { color: #C62828; font-weight: 600; }
+.header .nav a.sale-link.on { color: #C62828; }

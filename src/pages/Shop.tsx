@@ -36,7 +36,8 @@ export function Shop({ route }: { route: Route }) {
   const hasYearRound = useMemo(() => everything.some((p) => !p.season), [everything]);
 
   const list = useMemo(() => {
-    let l = seasonalMode ? seasonalAll.slice() : shelfId ? shelf(shelfId) : everything.slice();
+    // On Sale lists every switched-on candle with a sale, season open or not, biggest discount first
+    let l = seasonalMode ? seasonalAll.slice() : shelfId === 'sale' ? everything.filter((p) => p.salePct > 0).sort((a, b) => b.salePct - a.salePct) : shelfId ? shelf(shelfId) : everything.slice();
     if (cat) l = l.filter((p) => p.cat === cat);
     if (season === 'none') l = l.filter((p) => !p.season);
     else if (season) l = l.filter((p) => p.season === season);
@@ -94,7 +95,7 @@ export function Shop({ route }: { route: Route }) {
               <div className="label-s">{t('Collections')}</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <Chip on={!shelfId} onClick={() => link({ shelf: '' })}>{t('All')}</Chip>
-                {SHELVES.filter((s) => shelf(s.id).length > 0).map((s) => <Chip key={s.id} on={shelfId === s.id} onClick={() => link({ shelf: s.id })}>{t(s.title)}</Chip>)}
+                {SHELVES.filter((s) => (s.id === 'sale' ? everything.some((p) => p.salePct > 0) : shelf(s.id).length > 0)).map((s) => <Chip key={s.id} on={shelfId === s.id} onClick={() => link({ shelf: s.id })}>{t(s.title)}</Chip>)}
               </div>
             </div>
           )}
