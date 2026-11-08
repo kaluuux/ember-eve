@@ -82,7 +82,7 @@ export function Product({ route }: { route: Route }) {
         <div className="layout-half" style={{ marginTop: 16 }}>
           {photos.length > 0 ? (
             <div className="stack" style={{ gap: 12 }}>
-              <div className="gal-main"><img key={img} src={photos[Math.min(img, photos.length - 1)]} alt={pp.name} /></div>
+              <div className="gal-main"><img key={img} src={photos[Math.min(img, photos.length - 1)]} alt={pp.name + ' handmade soy wax candle, Sri Lanka'} /></div>
               {photos.length > 1 && (
                 <div className="gal-thumbs">
                   {photos.map((u, i) => <button key={u + i} type="button" className={img === i ? 'on' : ''} onClick={() => setImg(i)} aria-label={'Photo ' + (i + 1)}><img src={u} alt="" loading="lazy" /></button>)}

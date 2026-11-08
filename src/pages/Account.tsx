@@ -9,6 +9,7 @@ import { EMPTY, SL_DISTRICTS, addressBook, get, isEmail, money, set, useStored }
 import { remote } from '../remote';
 import { saveProfile, updatePassword } from '../sync';
 import { go } from '../router';
+import { firstName } from '../components/WelcomeDialog';
 import type { Order, SavedAddress, User } from '../types';
 import type { Route } from '../router';
 import { useT } from '../i18n';
@@ -71,7 +72,7 @@ export function Account({ route }: { route: Route }) {
     <section className="page">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
         <div>
-          <h1 className="h1">{t('Hi,')}{' '}{user.name.split(' ')[0]}</h1>
+          <h1 className="h1">{firstName(user.name) ? t('Hi,') + ' ' + firstName(user.name) : t('My Account')}</h1>
           <p className="muted" style={{ margin: '4px 0 0' }}>{user.email}</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

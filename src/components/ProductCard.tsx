@@ -34,7 +34,7 @@ export function ProductCard({ p }: { p: Product }) {
             {isNew && <span className="tagpill new">{t('New')}</span>}
             {sold && <span className="badge">{t('Sold out')}</span>}
           </span>
-          {photo ? <><img className="thumb-img" src={photo} alt={p.name} loading="lazy" />{photo2 && <img className="thumb-img alt" src={photo2} alt="" loading="lazy" />}</> : <span>{t('Image:')}{' '}{p.name}</span>}
+          {photo ? <><img className="thumb-img" src={photo} alt={p.name + ' handmade soy wax candle'} loading="lazy" />{photo2 && <img className="thumb-img alt" src={photo2} alt="" loading="lazy" />}</> : <span>{t('Image:')}{' '}{p.name}</span>}
         </a>
         <button type="button" className="heart" aria-pressed={saved} aria-label={saved ? t('Remove from saved') : 'Save ' + p.name} onClick={() => toggleWish(p.id)}><Ico n="heart" /></button>
       </div>

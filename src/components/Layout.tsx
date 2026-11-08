@@ -9,6 +9,7 @@ import { FloatingActions, Ico, Newsletter } from './Flair';
 import { safeUrl } from '../store';
 import { LANGS, setLang, useLang, useT } from '../i18n';
 import { DevNotice } from './DevNotice';
+import { WelcomeDialog, firstName } from './WelcomeDialog';
 
 /** The cookie notice is switched off for now. Set this to true to bring it back. */
 const SHOW_COOKIE_BANNER = false;
@@ -143,7 +144,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 <a href="/about" {...here('about')}>{t('About')}</a>
                 <a href="/contact" {...here('contact')}>{t('Contact')}</a>
                 <div className="mm-row">
-                  <a href={user ? '/account' : '/login'}>{user ? t('Hi,') + ' ' + user.name.split(' ')[0] : t('Sign In')}</a>
+                  <a href={user ? '/account' : '/login'}>{user ? (firstName(user.name) ? t('Hi,') + ' ' + firstName(user.name) : t('My Account')) : t('Sign In')}</a>
                   <a href="/account?tab=wish">{t('Saved ·')}{' '}{wish.length}</a>
                 </div>
                 <LangSwitch className="mm-lang" />
@@ -154,7 +155,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <form onSubmit={doSearch} style={{ margin: 0 }} role="search">
               <input className="search" name="hq" value={hq} onChange={(e) => setHq(e.target.value)} placeholder={t('Search candles')} aria-label={t('Search candles')} />
             </form>
-            <a href={user ? '/account' : '/login'} className="hdr-user">{user ? t('Hi,') + ' ' + user.name.split(' ')[0] : t('Sign In')}</a>
+            <a href={user ? '/account' : '/login'} className="hdr-user">{user ? (firstName(user.name) ? t('Hi,') + ' ' + firstName(user.name) : t('My Account')) : t('Sign In')}</a>
             <a href="/account?tab=wish" className="hide-sm">{t('Saved ·')}{' '}{wish.length}</a>
             <button type="button" className={'basket-btn' + (bump ? ' bump' : '')} onClick={() => { setMenu(false); setCartOpen(true); }}>{t('Basket ·')}{' '}{cartCount}</button>
           
@@ -178,7 +179,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 {settings.pickupAddress && <span>{settings.pickupAddress}</span>}
               </div>
             </div>
-            <FooterCol title={t('Shop')} links={[['All Candles', '/shop'], ['Gift Box', '/gifts'], ...(remote && settings.giftCardsOn ? [['Gift Cards', '/gift-cards'] as [string, string]] : []), ['Colour Finder', '/finder']]} />
+            <FooterCol title={t('Shop')} links={[['All Candles', '/shop'], ['Gift Box', '/gifts'], ...(remote && settings.giftCardsOn ? [['Gift Cards', '/gift-cards'] as [string, string]] : []), ['Colour Finder', '/finder'], ['Candle Guides', '/guides']]} />
             <FooterCol title={t('Help')} links={[['FAQ', '/faq'], ['Shipping and Returns', '/shipping'], ['Candle Care', '/care'], ['Track Order', '/track'], ['Contact', '/contact']]} />
             <FooterCol title={t('Company')} links={[['About', '/about'], ['Privacy Policy', '/privacy'], ['Terms', '/terms'], ['Staff Login', '/admin']]} />
             <div className="fcol">
@@ -199,6 +200,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <FloatingActions />
       <CartDrawer />
       <QuickViewModal />
+      <WelcomeDialog />
       {toast && <div className="toast" role="status">{t(toast)}</div>}
       {SHOW_COOKIE_BANNER && !cookieAccepted && (
         <div className="cookie" role="dialog" aria-label={t('Cookies')}>

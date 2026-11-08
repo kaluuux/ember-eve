@@ -120,6 +120,11 @@ export function Shop({ route }: { route: Route }) {
         </aside>
 
         <div style={{ minWidth: 0 }}>
+          {!q && !cat && !shelfId && !season && !seasonalMode && (
+            <p className="muted" style={{ margin: '0 0 16px', fontSize: 14, lineHeight: '22px' }}>
+              {t('Handmade soy wax candles in Sri Lanka, hand-poured to order in mould, glass and jar, with delivery across the island.')}{' '}<a href="/guides/soy-candles-sri-lanka">{t('Read our soy candle guide')}</a>
+            </p>
+          )}
           {list.length === 0 && !hydrated && <div className="pgrid">{[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="skel" />)}</div>}
           {list.length === 0 && hydrated && (
             <div className="card" style={{ textAlign: 'center' }}>

@@ -1,6 +1,6 @@
 export interface SeoMeta {
   status: number; title: string; description: string; canonical: string; robots: string; image: string; type: string;
-  jsonld: Record<string, unknown>[]; shop: string; lang: string;
+  jsonld: Record<string, unknown>[]; body: string; shop: string; lang: string;
 }
 export const PRIVATE_PAGES: string[];
 export function startingPrice(p: unknown): number;
