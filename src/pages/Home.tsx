@@ -105,7 +105,7 @@ export function Home() {
               const n = active.filter((p) => p.cat === c.id).length;
               return (
                 <a key={c.id} href={'/shop?cat=' + c.id} className="cat-tile">
-                  <div className="art" style={{ background: TILE_TINTS[i % 4], color: 'var(--brown)' }}>{c.image ? <img src={c.image} alt={c.name} loading="lazy" /> : <Ico n="flame" />}</div>
+                  <div className="art" style={{ background: TILE_TINTS[i % 4], color: 'var(--brown)' }}>{c.image ? <img src={c.image} alt={c.name + ' soy wax candles, Sri Lanka'} loading="lazy" /> : <Ico n="flame" />}</div>
                   <span className="go"><Ico n="arrow" /></span>
                   <div className="body">
                     <div className="name">{c.name}</div>
@@ -136,7 +136,7 @@ export function Home() {
           </Reveal>
           <Reveal delay={120}>
             <span className="eyebrow">{t('Our craft')}</span>
-            <h2 className="h2">{t('Poured slowly, by hand')}</h2>
+            <h2 className="h2">{t('Handmade soy wax candles, made in Sri Lanka')}</h2>
             <p className="lede" style={{ margin: '16px 0 0' }}>
               {t('Every Ember & Eve candle is made in Sri Lanka, in small batches, from high quality soy wax. We pour, colour and finish each one ourselves, so it arrives the way you imagined it.')}
             </p>
@@ -145,7 +145,8 @@ export function Home() {
               <li>{t('Your choice of colour, scent or no scent at all')}</li>
               <li>{t('Sticker messages and gift boxes, made just for you')}</li>
             </ul>
-            <a href="/about" className="btn ghost">{t('Read our story')}</a>
+            <a href="/about" className="btn ghost">{t('Read our story')}</a>{' '}
+            <a href="/guides/soy-candles-sri-lanka" className="btn ghost">{t('Soy candle guide')}</a>
           </Reveal>
         </div>
       </section>

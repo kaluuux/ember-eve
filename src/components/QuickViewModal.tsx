@@ -21,7 +21,7 @@ export function QuickViewModal() {
       <div className="scrim" onClick={close} />
       <div className="modal" role="dialog" aria-label={p.name}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 24 }}>
-          {p.images?.[0] ? <img className="qv-img" src={p.images[0]} alt={p.name} /> : <div className="ph ph-art" style={{ backgroundColor: selectionTint(sel, colors), aspectRatio: '1', borderRadius: 18 }}>{t('Image:')}{' '}{p.name}</div>}
+          {p.images?.[0] ? <img className="qv-img" src={p.images[0]} alt={p.name + ' handmade soy wax candle'} /> : <div className="ph ph-art" style={{ backgroundColor: selectionTint(sel, colors), aspectRatio: '1', borderRadius: 18 }}>{t('Image:')}{' '}{p.name}</div>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div className="h3">{p.name}</div>
