@@ -3,7 +3,7 @@ import type { Product } from '../types';
 import { useApp } from '../AppContext';
 import { go } from '../router';
 import { money } from '../store';
-import { defaultSelection, fromListPrice, inStock, lowestPrice, normalize, ratingOf, soft } from '../commerce';
+import { defaultSelection, fromListPrice, inStock, lowestPrice, normalize, ratingOf, soft, pctText } from '../commerce';
 import { Ico } from './Flair';
 import { useT } from '../i18n';
 
@@ -30,7 +30,7 @@ export function ProductCard({ p }: { p: Product }) {
       <div className="thumb-wrap">
         <a href={href} className={'ph stripe thumb' + (photo ? ' has-img' : '')} style={{ backgroundColor: soft(hex) }} aria-label={p.name}>
           <span className="badge-row">
-            {p.salePct > 0 && <span className="tagpill sale">-{p.salePct}%</span>}
+            {p.salePct > 0 && <span className="tagpill sale">-{pctText(p.salePct)}%</span>}
             {isNew && <span className="tagpill new">{t('New')}</span>}
             {sold && <span className="badge">{t('Sold out')}</span>}
           </span>

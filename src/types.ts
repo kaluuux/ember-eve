@@ -28,6 +28,8 @@ export interface Product {
   stock: number | null;
   /** Percentage off, 0 = not on sale */
   salePct: number;
+  /** Optional: the sale was entered as a price (for the default choices) instead of a percentage. salePct is worked out from it, so the shop and server keep using the percentage. */
+  salePrice?: number;
   /** Admin-pinned shelf badges, on top of the automatic ones */
   pins: Pin[];
   /** Season id, '' = year-round */
