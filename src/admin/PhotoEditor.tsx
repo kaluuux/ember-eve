@@ -1,70 +1,110 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 
 export type Folder = 'products' | 'categories' | 'gallery';
 /** A place the photo appears on the site. Ratios are width / height, copied from the storefront CSS. */
 interface Frame { label: string; desktop: number; mobile: number }
 
-const SPEC: Record<Folder, { ratio: number; frames: Frame[]; note: string }> = {
+const SPEC: Record<Folder, { frames: Frame[]; note: string }> = {
   // card: square on desktop, 1 / 1.02 on phones · product page gallery: square on desktop, 1 / 0.86 on phones
   products: {
-    ratio: 1,
     frames: [{ label: 'Shop card', desktop: 1, mobile: 1 / 1.02 }, { label: 'Product page', desktop: 1, mobile: 1 / 0.86 }],
-    note: 'Photos are cropped square. On phones the product page is a little wider than tall, so keep the candle inside the dashed box.',
+    note: 'The shop shows photos square, and a little wider than tall on phones. A square crop keeps everything you chose; any other shape is trimmed to fit.',
   },
-  categories: { ratio: 4 / 3, frames: [{ label: 'Home tile', desktop: 4 / 3, mobile: 4 / 3 }], note: 'Home page tiles are 4:3.' },
-  gallery: { ratio: 4 / 5, frames: [{ label: 'Home gallery', desktop: 4 / 5, mobile: 4 / 5 }], note: 'Home gallery photos are 4:5 (portrait).' },
+  categories: { frames: [{ label: 'Home tile', desktop: 4 / 3, mobile: 4 / 3 }], note: 'Home page tiles are 4:3 (landscape).' },
+  gallery: { frames: [{ label: 'Home gallery', desktop: 4 / 5, mobile: 4 / 5 }], note: 'Home gallery photos are 4:5 (portrait).' },
 };
+
+/** Shapes to snap the crop to. 'free' lets you pull any side to any size. */
+const ASPECTS: [string, string, number][] = [['free', 'Free', 0], ['orig', 'Original', -1], ['1:1', 'Square', 1], ['4:5', 'Portrait 4:5', 4 / 5], ['4:3', 'Landscape 4:3', 4 / 3], ['16:9', 'Wide 16:9', 16 / 9]];
 
 export type CropResult = Blob | 'original' | null;
 
 /* ------------------------------------------------------------------ geometry */
-interface Centre { x: number; y: number }
+/** The crop box as fractions (0 to 1) of the rotated photo */
+interface Rect { x: number; y: number; w: number; h: number }
+const FULL: Rect = { x: 0, y: 0, w: 1, h: 1 };
+const MIN = 0.05;
+const clamp = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
 
-/** Keep the frame on the photo; when the frame is bigger than the photo along an axis, centre the photo in it. */
-const place = (v: number, size: number, region: number) => (region >= size ? (size - region) / 2 : Math.min(Math.max(v, 0), size - region));
-
-function geom(img: HTMLImageElement, rot: number, A: number, zoom: number, c: Centre) {
+function dims(img: HTMLImageElement, rot: number) {
   const odd = rot % 2 === 1;
-  const sw = odd ? img.naturalHeight : img.naturalWidth, sh = odd ? img.naturalWidth : img.naturalHeight;
-  // zoom 1 shows the whole photo (the frame is as big as the photo needs, with white around it if the shapes differ); zooming in crops closer
-  let rw: number, rh: number;
-  if (sw / sh > A) { rw = sw; rh = sw / A; } else { rh = sh; rw = sh * A; }
-  rw /= zoom; rh /= zoom;
-  const x0 = place(c.x * sw - rw / 2, sw, rw), y0 = place(c.y * sh - rh / 2, sh, rh);
-  return { sw, sh, rw, rh, x0, y0 };
+  return { sw: odd ? img.naturalHeight : img.naturalWidth, sh: odd ? img.naturalWidth : img.naturalHeight };
 }
 
-/** Draw the visible region of the (rotated) photo into a canvas of the crop's shape. */
-function paint(canvas: HTMLCanvasElement, img: HTMLImageElement, rot: number, A: number, zoom: number, c: Centre, outW: number) {
-  const g = geom(img, rot, A, zoom, c);
-  canvas.width = outW; canvas.height = Math.round(outW / A);
+/** Draw the chosen part of the (rotated) photo into a canvas outW wide. */
+function paint(canvas: HTMLCanvasElement, img: HTMLImageElement, rot: number, r: Rect, outW: number) {
+  const { sw, sh } = dims(img, rot);
+  const rw = r.w * sw, rh = r.h * sh;
+  canvas.width = outW; canvas.height = Math.max(1, Math.round((outW * rh) / rw));
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.save();
-  ctx.scale(outW / g.rw, outW / g.rw);
-  ctx.translate(-g.x0, -g.y0);
-  if (rot === 1) { ctx.translate(g.sw, 0); ctx.rotate(Math.PI / 2); }
-  else if (rot === 2) { ctx.translate(g.sw, g.sh); ctx.rotate(Math.PI); }
-  else if (rot === 3) { ctx.translate(0, g.sh); ctx.rotate(-Math.PI / 2); }
+  ctx.scale(outW / rw, outW / rw);
+  ctx.translate(-r.x * sw, -r.y * sh);
+  if (rot === 1) { ctx.translate(sw, 0); ctx.rotate(Math.PI / 2); }
+  else if (rot === 2) { ctx.translate(sw, sh); ctx.rotate(Math.PI); }
+  else if (rot === 3) { ctx.translate(0, sh); ctx.rotate(-Math.PI / 2); }
   ctx.drawImage(img, 0, 0);
   ctx.restore();
-  return g;
 }
+
+/** Largest centred box of a given pixel shape inside the photo. */
+function fitBox(lock: number, sw: number, sh: number): Rect {
+  const ar = (lock * sh) / sw; // width / height as fractions
+  const w = ar >= 1 ? 1 : ar, h = ar >= 1 ? 1 / ar : 1;
+  return { x: (1 - w) / 2, y: (1 - h) / 2, w, h };
+}
+
+/**
+ * Drag one handle by (dx, dy) (fractions of the photo). Edges and corners move the sides they touch.
+ * `ar` is width / height in fractions: 0 means free, otherwise the shape is kept and the box stays on the photo.
+ */
+function resize(r: Rect, h: string, dx: number, dy: number, ar: number): Rect {
+  let x1 = r.x, y1 = r.y, x2 = r.x + r.w, y2 = r.y + r.h;
+  if (h.includes('w')) x1 = clamp(x1 + dx, 0, x2 - MIN);
+  if (h.includes('e')) x2 = clamp(x2 + dx, x1 + MIN, 1);
+  if (h.includes('n')) y1 = clamp(y1 + dy, 0, y2 - MIN);
+  if (h.includes('s')) y2 = clamp(y2 + dy, y1 + MIN, 1);
+  if (!ar) return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+
+  let w = x2 - x1, hh = y2 - y1;
+  const horiz = h === 'e' || h === 'w', vert = h === 'n' || h === 's';
+  if (horiz) hh = w / ar; else if (vert) w = hh * ar; else if (w / ar > hh) hh = w / ar; else w = hh * ar;
+  const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+  // the corner (or edge) opposite the handle stays put
+  const ax = h.includes('w') ? r.x + r.w : r.x, ay = h.includes('n') ? r.y + r.h : r.y;
+  const availW = vert ? 2 * Math.min(cx, 1 - cx) : h.includes('w') ? ax : 1 - ax;
+  const availH = horiz ? 2 * Math.min(cy, 1 - cy) : h.includes('n') ? ay : 1 - ay;
+  const k = Math.min(1, availW / w, availH / hh);
+  w *= k; hh *= k;
+  if (w < MIN) { w = MIN; hh = w / ar; }
+  if (hh < MIN) { hh = MIN; w = hh * ar; }
+  const x = vert ? cx - w / 2 : h.includes('w') ? ax - w : ax;
+  const y = horiz ? cy - hh / 2 : h.includes('n') ? ay - hh : ay;
+  return { x: clamp(x, 0, 1 - w), y: clamp(y, 0, 1 - hh), w, h: hh };
+}
+
+const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+const HPOS: Record<string, CSSProperties> = {
+  nw: { left: 0, top: 0 }, n: { left: '50%', top: 0 }, ne: { left: '100%', top: 0 }, e: { left: '100%', top: '50%' },
+  se: { left: '100%', top: '100%' }, s: { left: '50%', top: '100%' }, sw: { left: 0, top: '100%' }, w: { left: 0, top: '50%' },
+};
 
 /* -------------------------------------------------------------------- editor */
 export function PhotoEditor({ src, folder, n, of, onClose }: { src: File | string; folder: Folder; n: number; of: number; onClose: (r: CropResult) => void }) {
-  const { ratio: A, frames, note } = SPEC[folder];
+  const { frames, note } = SPEC[folder];
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const [loadErr, setLoadErr] = useState('');
   const [rot, setRot] = useState(0);
-  const [zoom, setZoom] = useState(1);
-  const [c, setC] = useState<Centre>({ x: 0.5, y: 0.5 });
+  const [rect, setRect] = useState<Rect>(FULL);
+  const [aspect, setAspect] = useState('free');
   const [guide, setGuide] = useState(true);
   const [prev, setPrev] = useState('');
   const [busy, setBusy] = useState(false);
-  const stage = useRef<HTMLCanvasElement>(null);
+  const base = useRef<HTMLCanvasElement>(null);
+  const wrap = useRef<HTMLDivElement>(null);
   const dialog = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ x: number; y: number; cx: number; cy: number } | null>(null);
+  const drag = useRef<{ h: string; sx: number; sy: number; r0: Rect } | null>(null);
 
   // load the photo (a new file, or an uploaded one being adjusted again)
   useEffect(() => {
@@ -85,56 +125,77 @@ export function PhotoEditor({ src, folder, n, of, onClose }: { src: File | strin
     return () => window.removeEventListener('keydown', k);
   }, [onClose]);
 
-  // repaint the crop area and the small previews whenever anything changes
+  const size = useMemo(() => (img ? dims(img, rot) : { sw: 1, sh: 1 }), [img, rot]);
+  const lockOf = (key: string) => { const a = ASPECTS.find((x) => x[0] === key)!; return a[2] === -1 ? size.sw / size.sh : a[2]; };
+  const lock = lockOf(aspect);
+  const ar = lock ? (lock * size.sh) / size.sw : 0;
+
+  // the whole photo, shown behind the crop box (rebuilt when it is rotated)
   useEffect(() => {
-    if (!img || !stage.current) return;
-    paint(stage.current, img, rot, A, zoom, c, 720);
+    if (!img || !base.current) return;
+    paint(base.current, img, rot, FULL, Math.min(size.sw, 960));
+  }, [img, rot, size.sw]);
+
+  // small previews of the crop, repainted as it changes
+  useEffect(() => {
+    if (!img) return;
     const raf = requestAnimationFrame(() => {
       const t = document.createElement('canvas');
-      paint(t, img, rot, A, zoom, c, 420);
+      paint(t, img, rot, rect, Math.min(420, Math.max(60, Math.round(rect.w * size.sw))));
       setPrev(t.toDataURL('image/jpeg', 0.82));
     });
     return () => cancelAnimationFrame(raf);
-  }, [img, rot, zoom, c, A]);
+  }, [img, rot, rect, size.sw]);
 
+  const cropAspect = (rect.w * size.sw) / (rect.h * size.sh);
   // the part of the crop that every frame (desktop and phone) always shows
   let vFrac = 1, hFrac = 1;
-  frames.forEach((f) => [f.desktop, f.mobile].forEach((r) => { if (r > A) vFrac = Math.min(vFrac, A / r); else if (r < A) hFrac = Math.min(hFrac, r / A); }));
+  frames.forEach((f) => [f.desktop, f.mobile].forEach((r) => { if (r > cropAspect) vFrac = Math.min(vFrac, cropAspect / r); else if (r < cropAspect) hFrac = Math.min(hFrac, r / cropAspect); }));
   const showGuide = guide && (vFrac < 0.995 || hFrac < 0.995);
 
-  const move = (dx: number, dy: number) => {
+  const pick = (key: string) => { setAspect(key); const l = lockOf(key); setRect(l ? fitBox(l, size.sw, size.sh) : rect); };
+  const turn = (d: number) => {
     if (!img) return;
-    const g = geom(img, rot, A, zoom, c);
-    const x0 = place(g.x0 + dx, g.sw, g.rw), y0 = place(g.y0 + dy, g.sh, g.rh);
-    setC({ x: (x0 + g.rw / 2) / g.sw, y: (y0 + g.rh / 2) / g.sh });
+    const nr = (rot + d + 4) % 4, nd = dims(img, nr);
+    setRot(nr);
+    const a = ASPECTS.find((x) => x[0] === aspect)!;
+    setRect(a[2] === 0 ? FULL : fitBox(a[2] === -1 ? nd.sw / nd.sh : a[2], nd.sw, nd.sh));
   };
-  const onDown = (e: React.PointerEvent) => { e.currentTarget.setPointerCapture(e.pointerId); drag.current = { x: e.clientX, y: e.clientY, cx: e.clientX, cy: e.clientY }; };
-  const onMove = (e: React.PointerEvent) => {
-    const d = drag.current;
-    if (!d || !img || !stage.current) return;
-    const rect = stage.current.getBoundingClientRect(), g = geom(img, rot, A, zoom, c);
-    move(-((e.clientX - d.cx) / rect.width) * g.rw, -((e.clientY - d.cy) / rect.height) * g.rh);
-    d.cx = e.clientX; d.cy = e.clientY;
+  const reset = () => { setRot(0); setAspect('free'); setRect(FULL); };
+
+  const grab = (h: string) => ({
+    onPointerDown: (e: ReactPointerEvent) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.setPointerCapture(e.pointerId); drag.current = { h, sx: e.clientX, sy: e.clientY, r0: rect }; },
+    onPointerMove: (e: ReactPointerEvent) => {
+      const d = drag.current;
+      if (!d || d.h !== h || !wrap.current) return;
+      const b = wrap.current.getBoundingClientRect();
+      const dx = (e.clientX - d.sx) / b.width, dy = (e.clientY - d.sy) / b.height;
+      setRect(h === 'move' ? { ...d.r0, x: clamp(d.r0.x + dx, 0, 1 - d.r0.w), y: clamp(d.r0.y + dy, 0, 1 - d.r0.h) } : resize(d.r0, h, dx, dy, ar));
+    },
+    onPointerUp: () => { drag.current = null; },
+    onPointerCancel: () => { drag.current = null; },
+  });
+  const onKey = (e: ReactKeyboardEvent) => {
+    const s = e.shiftKey ? 0.05 : 0.01;
+    const m: Record<string, [number, number]> = { ArrowLeft: [-s, 0], ArrowRight: [s, 0], ArrowUp: [0, -s], ArrowDown: [0, s] };
+    if (!m[e.key]) return;
+    e.preventDefault();
+    setRect((r) => ({ ...r, x: clamp(r.x + m[e.key][0], 0, 1 - r.w), y: clamp(r.y + m[e.key][1], 0, 1 - r.h) }));
   };
-  const onKey = (e: React.KeyboardEvent) => {
-    if (!img) return;
-    const g = geom(img, rot, A, zoom, c), s = 0.04;
-    const m: Record<string, [number, number]> = { ArrowLeft: [-s * g.rw, 0], ArrowRight: [s * g.rw, 0], ArrowUp: [0, -s * g.rh], ArrowDown: [0, s * g.rh] };
-    if (m[e.key]) { e.preventDefault(); move(...m[e.key]); }
-  };
-  const turn = (d: number) => { setRot((r) => (r + d + 4) % 4); setC({ x: 0.5, y: 0.5 }); };
-  const reset = () => { setRot(0); setZoom(1); setC({ x: 0.5, y: 0.5 }); };
 
   const apply = async () => {
     if (!img) return;
     setBusy(true);
     const t = document.createElement('canvas');
-    const g = geom(img, rot, A, zoom, c);
-    paint(t, img, rot, A, zoom, c, Math.min(1400, Math.max(300, Math.round(g.rw))));
+    paint(t, img, rot, rect, Math.min(1600, Math.max(100, Math.round(rect.w * size.sw))));
     const blob = await new Promise<Blob | null>((res) => t.toBlob(res, 'image/jpeg', 0.9));
     setBusy(false);
     onClose(blob ?? 'original');
   };
+
+  const p = (v: number) => v * 100 + '%';
+  const x2 = rect.x + rect.w, y2 = rect.y + rect.h;
+  const full = rect.w > 0.999 && rect.h > 0.999;
 
   return (
     <>
@@ -152,18 +213,23 @@ export function PhotoEditor({ src, folder, n, of, onClose }: { src: File | strin
         ) : (
           <div className="pe-body">
             <div className="pe-left">
-              <div className="pe-stagewrap" style={{ width: `min(360px, 100%, calc(46vh * ${A}))`, aspectRatio: String(A) }}>
-                <canvas
-                  ref={stage} className="pe-stage" tabIndex={0}
-                  aria-label="Photo crop area. Drag the photo, or use the arrow keys, to move it."
-                  onPointerDown={onDown} onPointerMove={onMove} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }} onKeyDown={onKey}
-                />
-                {showGuide && <div className="pe-guide" style={{ width: hFrac * 100 + '%', height: vFrac * 100 + '%' }}><span>Always visible</span></div>}
+              <div className="pe-stagewrap" ref={wrap} style={{ width: `min(100%, 440px, calc(44vh * ${size.sw / size.sh}))`, aspectRatio: String(size.sw / size.sh) }}>
+                <canvas ref={base} className="pe-stage" aria-label="Your photo" />
+                <div className="pe-dim" style={{ clipPath: `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${p(rect.x)} ${p(rect.y)}, ${p(rect.x)} ${p(y2)}, ${p(x2)} ${p(y2)}, ${p(x2)} ${p(rect.y)}, ${p(rect.x)} ${p(rect.y)})` }} />
+                <div
+                  className="pe-box" tabIndex={0} role="group" aria-label="Crop box. Drag to move it, drag a side or corner to resize it, or use the arrow keys to move it."
+                  style={{ left: p(rect.x), top: p(rect.y), width: p(rect.w), height: p(rect.h) }}
+                  onKeyDown={onKey} {...grab('move')}
+                >
+                  {showGuide && <div className="pe-guide" style={{ width: hFrac * 100 + '%', height: vFrac * 100 + '%' }}><span>Always visible</span></div>}
+                  {HANDLES.map((h) => <span key={h} className={'pe-h h-' + h} style={HPOS[h]} {...grab(h)}><i /></span>)}
+                </div>
               </div>
+              <div className="muted" style={{ fontSize: 12 }}>{Math.round(rect.w * size.sw)} × {Math.round(rect.h * size.sh)} px{full ? ' · whole photo' : ''}</div>
               <div className="pe-controls">
-                <label className="pe-zoom">Zoom (1× shows the whole photo)
-                  <input type="range" min={1} max={4} step={0.01} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} aria-label="Zoom" />
-                </label>
+                <div className="pe-row" role="group" aria-label="Crop shape">
+                  {ASPECTS.map(([k, l]) => <button key={k} type="button" className="btn-xs" aria-pressed={aspect === k} style={aspect === k ? { background: '#26292B', color: '#fff', borderColor: '#26292B' } : undefined} onClick={() => pick(k)}>{l}</button>)}
+                </div>
                 <div className="pe-row">
                   <button type="button" className="btn-xs" onClick={() => turn(-1)} aria-label="Rotate left">⟲ Rotate</button>
                   <button type="button" className="btn-xs" onClick={() => turn(1)} aria-label="Rotate right">Rotate ⟳</button>
