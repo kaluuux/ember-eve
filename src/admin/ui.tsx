@@ -42,6 +42,7 @@ export function PayBadge({ o }: { o: Order }) {
 const ICONS: Record<string, string> = {
   dash: 'M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6v-9h-6v9Zm0-16v5h6V4h-6Z',
   orders: 'M6 7h12l1 13H5L6 7Zm3 0a3 3 0 0 1 6 0',
+  reports: 'M4 20V10m6 10V4m6 16v-7m4 7H3',
   products: 'M12 3c1.5 2 2.5 3 2.5 4.5a2.5 2.5 0 0 1-5 0C9.5 6 10.5 5 12 3ZM8 12h8v8a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-8Z',
   catalog: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4',
   customers: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm-6 9a6 6 0 0 1 12 0M17 11a3 3 0 1 0 0-6M21 20a5 5 0 0 0-4-4.9',

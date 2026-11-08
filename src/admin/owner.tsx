@@ -15,6 +15,8 @@ const ACTION_TEXT: Record<string, string> = {
   'catalog.update': 'Edited the catalogue', 'team.add': 'Added a team member', 'team.remove': 'Removed a team member', 'team.role': 'Changed a role',
   'review.approve': 'Published a review', 'review.update': 'Edited a review', 'review.delete': 'Deleted a review',
   'cost.update': 'Changed a cost price', 'giftcard.create': 'Created a gift card', 'credit.adjust': 'Adjusted store credit',
+  'order.placed': 'New order placed', 'order.payment': 'Changed payment status', 'order.tracking': 'Changed tracking', 'order.packed': 'Marked packed', 'order.note': 'Edited a private order note',
+  'costs.update': 'Changed cost prices', 'bulk.enquiry': 'Bulk order enquiry received', 'message.delete': 'Deleted a message', 'backup.manual': 'Made a backup',
 };
 const nice = (a: string) => ACTION_TEXT[a] ?? a.replace(/[._]/g, ' ');
 const brief = (d: Record<string, unknown>): string => {
@@ -31,8 +33,11 @@ export function ActivityView() {
   const [rows, setRows] = useState<ActivityRow[] | null>(null);
   const [who, setWho] = useState('');
   useEffect(() => { void listActivity().then(setRows); }, []);
+  const [kind, setKind] = useState('');
+  const [find, setFind] = useState('');
   const people = useMemo(() => [...new Set((rows ?? []).map((r) => r.actor))], [rows]);
-  const shown = (rows ?? []).filter((r) => !who || r.actor === who);
+  const kinds = useMemo(() => [...new Set((rows ?? []).map((r) => r.action.split('.')[0]))], [rows]);
+  const shown = (rows ?? []).filter((r) => (!who || r.actor === who) && (!kind || r.action.split('.')[0] === kind) && (!find || (nice(r.action) + ' ' + (r.target ?? '') + ' ' + brief(r.detail) + ' ' + r.actor).toLowerCase().includes(find.toLowerCase())));
   return (
     <>
       <PageHead title="Activity" sub="Who changed what, newest first. Only owners can see this." actions={<button type="button" className="btn ghost sm" onClick={() => rows && downloadCsv('activity', [['When', 'Who', 'What', 'Target', 'Detail'], ...rows.map((r) => [r.at, r.actor, nice(r.action), r.target ?? '', brief(r.detail)])])}>Export CSV</button>} />
@@ -42,6 +47,11 @@ export function ActivityView() {
           <div className="filters">
             <button type="button" className={'chip' + (!who ? ' on' : '')} onClick={() => setWho('')}>Everyone</button>
             {people.map((p) => <button key={p} type="button" className={'chip' + (who === p ? ' on' : '')} onClick={() => setWho(p)}>{p}</button>)}
+          </div>
+          <div className="filters">
+            <button type="button" className={'chip' + (!kind ? ' on' : '')} onClick={() => setKind('')}>All types</button>
+            {kinds.map((k) => <button key={k} type="button" className={'chip' + (kind === k ? ' on' : '')} onClick={() => setKind(k)}>{k}</button>)}
+            <input className="input" type="search" placeholder="Search the log" aria-label="Search the log" value={find} onChange={(e) => setFind(e.target.value)} style={{ width: 220, padding: '6px 10px' }} />
           </div>
           <div className="card" style={{ padding: '4px 16px' }}>
             {rows === null && <div className="empty">Loading…</div>}

@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { Icon } from './ui';
 import { EMPTY, get, set, useStored } from '../store';
 import { remote } from '../remote';
-import { adminSignIn, adminSignOut, onSyncError, requestReset, useIsAdmin, useRole } from '../sync';
+import { adminSignIn, adminSignOut, backupIfDue, onSyncError, requestReset, useIsAdmin, useRole } from '../sync';
 import { ErrorText, Field, useForm } from '../components/ui';
 import { go, type Route } from '../router';
 import type { Message, Order, Review } from '../types';
 import { Customers, Discounts, Messages, ReviewsView } from './views';
 import { Dashboard } from './dashboard';
+import { ReportsView } from './reports';
 import { OrdersView } from './orders';
 import { SettingsView } from './settings';
 import { CatalogView, ProductsView } from './catalog';
@@ -17,10 +18,10 @@ interface AdminSession { email: string }
 const NO_ADMIN: AdminSession | null = null;
 export const ADMIN_EMAIL = 'admin@emberandeve.example';
 
-const VIEWS = ['dash', 'orders', 'products', 'catalog', 'customers', 'discounts', 'giftcards', 'alerts', 'reviews', 'messages', 'activity', 'settings'] as const;
+const VIEWS = ['dash', 'orders', 'reports', 'products', 'catalog', 'customers', 'discounts', 'giftcards', 'alerts', 'reviews', 'messages', 'activity', 'settings'] as const;
 type View = (typeof VIEWS)[number];
-const GROUPS: [string, View[]][] = [['Overview', ['dash', 'orders']], ['Shop', ['products', 'catalog', 'discounts', 'giftcards', 'alerts']], ['People', ['customers', 'reviews', 'messages']], ['System', ['activity', 'settings']]];
-const LABELS: Record<View, string> = { dash: 'Dashboard', orders: 'Orders', products: 'Products', catalog: 'Catalogue', customers: 'Customers', discounts: 'Discounts', giftcards: 'Gift cards', alerts: 'Back in stock', reviews: 'Reviews', messages: 'Messages', activity: 'Activity', settings: 'Settings' };
+const GROUPS: [string, View[]][] = [['Overview', ['dash', 'orders', 'reports']], ['Shop', ['products', 'catalog', 'discounts', 'giftcards', 'alerts']], ['People', ['customers', 'reviews', 'messages']], ['System', ['activity', 'settings']]];
+const LABELS: Record<View, string> = { dash: 'Dashboard', orders: 'Orders', reports: 'Sales reports', products: 'Products', catalog: 'Catalogue', customers: 'Customers', discounts: 'Discounts', giftcards: 'Gift cards', alerts: 'Back in stock', reviews: 'Reviews', messages: 'Messages', activity: 'Activity', settings: 'Settings' };
 
 export function Admin({ route }: { route: Route }) {
   const localAdmin = useStored<AdminSession | null>('admin', NO_ADMIN);
@@ -33,6 +34,9 @@ export function Admin({ route }: { route: Route }) {
   const msgs = useStored<Message[]>('messages', EMPTY);
   const [toast, setToast] = useState('');
   const flash = (m: string) => { setToast(m); window.setTimeout(() => setToast(''), 1800); };
+
+  // owners opening the admin trigger a backup when the last one is over 20 hours old
+  useEffect(() => { if (remote && isAdmin && role === 'owner') void backupIfDue(); }, [isAdmin, role]);
 
   useEffect(() => onSyncError((m) => { setToast(m); window.setTimeout(() => setToast(''), 5000); }), []);
 
@@ -77,6 +81,7 @@ export function Admin({ route }: { route: Route }) {
       <main className="admin-main">
         {view === 'dash' && <Dashboard />}
         {view === 'orders' && <OrdersView sel={route.q.sel || ''} pay={route.q.pay || ''} status={route.q.status || ''} flash={flash} />}
+        {view === 'reports' && <ReportsView />}
         {view === 'products' && <ProductsView flash={flash} />}
         {view === 'catalog' && <CatalogView flash={flash} />}
         {view === 'customers' && <Customers />}

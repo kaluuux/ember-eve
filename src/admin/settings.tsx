@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { SL_DISTRICTS, get, safeUrl, set, useStored, DEFAULT_SETTINGS, withDefaults } from '../store';
 import { remote } from '../remote';
-import { addAdmin, adminEmail, exportAll, getNotify, listAdmins, removeAdmin, sendTestAlert, setAdminRole, setNotify, uploadQr, useIsAdmin } from '../sync';
+import { addAdmin, adminEmail, createBackup, exportAll, getBackup, listBackups, type BackupRow, getNotify, listAdmins, removeAdmin, sendTestAlert, setAdminRole, setNotify, uploadQr, useIsAdmin } from '../sync';
 import { ErrorText } from '../components/ui';
 import { PhotoManager } from './PhotoManager';
 import { PageHead } from './ui';
@@ -316,10 +316,60 @@ function TeamAndBackup({ flash }: { flash: Flash }) {
         <ErrorText>{err}</ErrorText>
       </Section>
 
-      <Section title="Backup" hint="Download everything (catalogue, orders, customers, reviews, messages) as one file. Do this regularly and keep the file somewhere private; it contains customer details. Receipt photos stay in Supabase Storage.">
-        <div><button type="button" className="btn ghost" onClick={backup}>Download full backup</button></div>
-      </Section>
+      <BackupSection flash={flash} onDownload={backup} />
     </>
+  );
+}
+
+/** Automatic daily backups kept in the database, plus a download of the live data. */
+function BackupSection({ flash, onDownload }: { flash: Flash; onDownload: () => void }) {
+  const [rows, setRows] = useState<BackupRow[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const refresh = () => { void listBackups().then(setRows); };
+  useEffect(refresh, []);
+  const now = async () => {
+    setBusy(true);
+    const e = await createBackup();
+    setBusy(false);
+    if (e) return flash(e);
+    flash('Backup saved'); refresh();
+  };
+  const save = async (r: BackupRow) => {
+    flash('Preparing download…');
+    const data = await getBackup(r.id);
+    if (!data) return flash('Could not read that backup.');
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = 'ember-eve-backup-' + r.at.slice(0, 10) + '-' + r.id + '.json';
+    a.click(); URL.revokeObjectURL(url);
+  };
+  const mb = (n: number) => (n < 1e6 ? Math.max(1, Math.round(n / 1e3)) + ' KB' : (n / 1e6).toFixed(1) + ' MB');
+  const last = rows?.[0];
+  const stale = last ? Date.now() - new Date(last.at).getTime() > 3 * 864e5 : false;
+  return (
+    <Section title="Backups" hint="The shop saves a full copy of your catalogue, orders, customers, reviews, messages and gift cards every night, and also whenever an owner opens the admin and the last copy is over 20 hours old. The latest 30 automatic copies are kept, and the ones you make yourself are never deleted. Product and receipt photos stay safe in Supabase Storage. Backups contain customer details, so download them only to a private place.">
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button type="button" className="btn" onClick={now} disabled={busy}>{busy ? 'Saving…' : 'Back up now'}</button>
+        <button type="button" className="btn ghost" onClick={onDownload}>Download live data</button>
+      </div>
+      {rows === null && <div className="muted" style={{ fontSize: 13 }}>Backups are not available yet. Run the latest <b>schema.sql</b> in the Supabase SQL editor to switch on automatic backups. You can still download the live data above.</div>}
+      {stale && <div className="err" role="status">The last backup was {new Date(last!.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}. Automatic backups may not be running: check that the pg_cron extension is on in Supabase (Database, Extensions), or open the admin daily.</div>}
+      {rows && rows.length === 0 && <div className="muted" style={{ fontSize: 13 }}>No backups yet. Press Back up now to make the first one.</div>}
+      {rows && rows.length > 0 && (
+        <div className="stack" style={{ gap: 0 }}>
+          {rows.slice(0, 12).map((r) => (
+            <div key={r.id} className="row-between" style={{ padding: '8px 0', borderBottom: '1px solid var(--line)', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 14 }}>
+                <b>{new Date(r.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</b>{' '}
+                <span className="muted">· {r.kind === 'manual' ? 'Made by you' : 'Automatic'} · {mb(r.bytes)} · {r.counts.orders ?? 0} orders, {r.counts.customers ?? 0} customers</span>
+              </div>
+              <button type="button" className="btn-xs" onClick={() => void save(r)}>Download</button>
+            </div>
+          ))}
+          {rows.length > 12 && <div className="muted" style={{ fontSize: 12, paddingTop: 8 }}>Showing the latest 12 of {rows.length}.</div>}
+        </div>
+      )}
+    </Section>
   );
 }
 

@@ -445,3 +445,14 @@ html[lang='si'] .header .dd-btn, html[lang='ta'] .header .dd-btn { font-size: 13
 .devnote .btn { margin-top: 6px; }
 @media (max-width: 520px) { .devnote { padding: 26px 20px 22px; border-radius: 20px; } .devnote-title { font-size: 24px; } }
 @media (prefers-reduced-motion: reduce) { .devnote, .devnote-scrim { animation: none; } }
+
+/* seasonal landing pages and the home countdown bar */
+.season-hero { background: linear-gradient(180deg, var(--cream, #F6EEE4), #fff); padding: 56px 0 40px; border-bottom: 1px solid var(--line); }
+.countdown { display: inline-flex; gap: 10px; }
+.cd-box { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 8px; min-width: 76px; box-shadow: var(--shadow-sm, 0 1px 3px rgba(0,0,0,.06)); }
+.cd-box b { display: block; font: 700 30px/1.1 Inter, sans-serif; font-variant-numeric: tabular-nums; color: var(--brown); }
+.cd-box span { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.season-bar { display: flex; justify-content: center; align-items: center; gap: 18px; flex-wrap: wrap; padding: 12px 16px; background: var(--brown, #8F6642); color: #fff; text-decoration: none; font-size: 15px; }
+.season-bar:hover { filter: brightness(1.06); }
+.season-bar .go { font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 480px) { .cd-box { min-width: 64px; } .cd-box b { font-size: 24px; } .countdown { gap: 6px; } }

@@ -23,10 +23,9 @@ export function PhotoManager({ images, onChange, folder, max = 8, compact }: { i
     let list = images.slice();
     const todo = Array.from(files).slice(0, Math.max(0, max - list.length || (max === 1 ? 1 : 0)));
     for (let i = 0; i < todo.length; i++) {
-      const r = await ask(todo[i], i + 1, todo.length);
-      if (r === null) continue; // skipped
+      // photos go in exactly as chosen; the ✎ button on a photo opens the crop and preview editor when you want it
       setBusy('Uploading ' + (i + 1) + ' of ' + todo.length + '…');
-      const up = await uploadImage(r === 'original' ? todo[i] : asFile(r), folder);
+      const up = await uploadImage(todo[i], folder);
       if (up.error) { setErr(up.error); break; }
       list = max === 1 ? [up.url] : list.concat(up.url);
       onChange(list);
@@ -79,7 +78,7 @@ export function PhotoManager({ images, onChange, folder, max = 8, compact }: { i
       </div>
       <input ref={file} type="file" accept="image/*" multiple={max > 1} hidden onChange={(e) => { void add(e.target.files); e.target.value = ''; }} />
       {err && <div className="err" role="alert">{err}</div>}
-      {!compact && <div className="muted" style={{ fontSize: 12 }}>The first photo is the cover. You can crop and preview every photo on desktop and mobile before it uploads, and click ✎ on a photo to adjust it again.</div>}
+      {!compact && <div className="muted" style={{ fontSize: 12 }}>The first photo is the cover. Photos are added exactly as you choose them. Click ✎ on a photo to crop it and preview how it looks on desktop and mobile.</div>}
       {/* portal: the product dialog is CSS-transformed, which would trap a fixed-position editor inside it */}
       {job && createPortal(<PhotoEditor src={job.src} folder={folder} n={job.n} of={job.of} onClose={finish} />, document.body)}
     </div>

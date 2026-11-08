@@ -5,11 +5,12 @@ import { FAQS } from './faq-data.js';
 import { GUIDES, guideBySlug } from './guides-data.js';
 
 export const PRIVATE_PAGES = ['cart', 'checkout', 'account', 'login', 'register', 'forgot', 'reset', 'order', 'invoice', 'admin', 'labels'];
-const KNOWN = ['', 'shop', 'guides', 'product', 'gifts', 'gift-cards', 'finder', 'about', 'contact', 'faq', 'shipping', 'care', 'privacy', 'terms', 'track', ...PRIVATE_PAGES];
+const KNOWN = ['', 'shop', 'guides', 'bulk', 'season', 'product', 'gifts', 'gift-cards', 'finder', 'about', 'contact', 'faq', 'shipping', 'care', 'privacy', 'terms', 'track', ...PRIVATE_PAGES];
 
 const STATIC_META = {
   '': ['{shop} | Handmade Soy Wax Candles in Sri Lanka', 'Shop handmade soy wax candles in Sri Lanka. Hand-poured, non-toxic soy candles in mould, glass and jar, in any colour or your own blend. Gift boxes and island-wide delivery from Ember & Eve.'],
   shop: ['Shop Soy Candles in Sri Lanka | {shop}', 'Browse handmade soy wax candles in Sri Lanka: mould, glass and jar candles in fifteen colours or your own blend. Hand-poured, non-toxic, delivered island-wide.'],
+  bulk: ['Corporate and Bulk Candle Orders in Sri Lanka | {shop}', 'Order handmade soy wax candles in bulk in Sri Lanka: corporate gifts, wedding favours, events, hotels and spas. Custom colours, personal messages and island-wide delivery. Request a quote.'],
   guides: ['Candle Guides | {shop}', 'Guides to soy wax candles in Sri Lanka: choosing a candle, gift ideas, soy vs paraffin wax and candle care, from the makers at {shop}.'],
   gifts: ['Candle Gift Boxes in Sri Lanka | {shop}', 'Create your own candle gift box in Sri Lanka. Pick handmade soy wax candles, choose every colour, add a personal note and we wrap it all up beautifully.'],
   'gift-cards': ['Gift cards | {shop}', 'Give the gift of candlelight. A {shop} gift card is delivered as a code the recipient can use at checkout.'],
@@ -86,6 +87,19 @@ export function metaFor({ path, query = {}, origin, data }) {
     meta.jsonld.push({ '@context': 'https://schema.org', '@type': 'Article', headline: g.title, description: g.description, image: meta.image, mainEntityOfPage: meta.canonical, inLanguage: 'en', author: { '@type': 'Organization', name: shop, url: origin }, publisher: { '@type': 'Organization', name: shop, logo: { '@type': 'ImageObject', url: origin + '/logo.png' } } });
     if (g.faq && g.faq.length) meta.jsonld.push(faqLd(g.faq));
     meta.jsonld.push(breadcrumbs(origin, [['Home', '/'], ['Guides', '/guides'], [g.title, '/guides/' + g.slug]]));
+    return meta;
+  }
+
+  if (name === 'season') {
+    const se = data && (data.seasons || []).find((x) => x.id === arg);
+    meta.canonical = origin + '/season/' + arg;
+    if (!se) { if (data) { meta.status = 404; meta.robots = 'noindex'; } meta.title = 'Seasonal candles | ' + shop; meta.description = fill(STATIC_META[''][1]); return meta; }
+    const items = ((data && data.products) || []).filter((p) => p.active !== false && p.season === se.id).slice(0, 60);
+    meta.title = se.name + ' · Seasonal Candles Sri Lanka | ' + shop;
+    meta.description = clip((se.blurb ? se.blurb + ' ' : '') + 'Handmade seasonal soy wax candles in Sri Lanka, hand-poured by ' + shop + '.', 200);
+    meta.body = page(se.name, [se.blurb, meta.description], productLinks(data, ''));
+    if (items.length) meta.jsonld.push({ '@context': 'https://schema.org', '@type': 'ItemList', name: se.name, itemListElement: items.map((p, i) => ({ '@type': 'ListItem', position: i + 1, url: origin + '/product/' + p.id, name: p.name })) });
+    meta.jsonld.push(breadcrumbs(origin, [['Home', '/'], ['Seasonal', '/shop?seasonal=1'], [se.name, '/season/' + se.id]]));
     return meta;
   }
 
@@ -204,9 +218,10 @@ export function injectHead(html, m) {
 
 /** sitemap.xml body */
 export function sitemapXml(origin, data) {
-  const urls = ['/', '/shop', '/gifts', '/gift-cards', '/finder', '/guides', ...GUIDES.map((g) => '/guides/' + g.slug), '/about', '/contact', '/faq', '/shipping', '/care', '/track', '/privacy', '/terms'];
+  const urls = ['/', '/shop', '/gifts', '/gift-cards', '/finder', '/bulk', '/guides', ...GUIDES.map((g) => '/guides/' + g.slug), '/about', '/contact', '/faq', '/shipping', '/care', '/track', '/privacy', '/terms'];
   const d = data || {};
   (d.categories || []).forEach((c) => urls.push('/shop?cat=' + c.id));
+  (d.seasons || []).filter((s) => (d.products || []).some((p) => p.active !== false && p.season === s.id)).forEach((s) => urls.push('/season/' + s.id));
   (d.products || []).filter((p) => p.active !== false).forEach((p) => urls.push('/product/' + p.id));
   const imgs = {};
   (d.products || []).filter((p) => p.active !== false).forEach((p) => { if (p.images && p.images.length) imgs['/product/' + p.id] = p.images.slice(0, 5).map((u) => ({ u: abs(origin, u), t: p.name })); });

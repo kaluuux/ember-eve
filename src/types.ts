@@ -188,5 +188,9 @@ export interface Order {
 }
 
 export interface Review { id: number; pid: number; who: string; stars: number; q: string; date: string; approved: boolean; /** Written by someone who bought it */ verified?: boolean; orderId?: string; /** Storage paths (or data URLs offline) */ photos?: string[] }
-export interface Message { id: number; name: string; email: string; text: string; date: string; read: boolean }
+export interface Message {
+  id: number; name: string; email: string; text: string; date: string; read: boolean;
+  /** 'bulk' for corporate and bulk order enquiries from the Bulk page */
+  kind?: 'bulk'; company?: string; phone?: string; occasion?: string; qty?: number; needBy?: string;
+}
 export interface Subscriber { email: string; date: string }

@@ -1049,6 +1049,101 @@ begin
 end $$;
 grant execute on function request_stock_alert(bigint, text) to anon, authenticated;
 
+-- ================================================================== automatic backups and bulk enquiry log
+-- A snapshot of the shop's data kept inside the database itself (last 30 automatic ones are kept, manual ones are never trimmed).
+-- Receipt photos and product photos stay in Storage. Customer details are inside, so only owners can read this table.
+create table if not exists backups (
+  id bigint generated always as identity primary key,
+  at timestamptz not null default now(),
+  kind text not null default 'auto',
+  bytes integer not null default 0,
+  counts jsonb not null default '{}'::jsonb,
+  data jsonb not null
+);
+alter table backups enable row level security;
+drop policy if exists "backups owner read" on backups;
+drop policy if exists "backups owner delete" on backups;
+create policy "backups owner read" on backups for select using (is_owner());
+create policy "backups owner delete" on backups for delete using (is_owner());
+
+-- builds the snapshot; not callable from the website (no grant), only by the owner wrapper below and the nightly job
+create or replace function ee_make_backup(k text) returns bigint
+language plpgsql security definer set search_path = public as $$
+declare d jsonb; c jsonb; new_id bigint;
+begin
+  d := jsonb_build_object(
+    'exportedAt', now(),
+    'catalog', coalesce((select jsonb_agg(to_jsonb(x)) from catalog_kv x), '[]'::jsonb),
+    'orders', coalesce((select jsonb_agg(to_jsonb(x)) from orders x), '[]'::jsonb),
+    'reviews', coalesce((select jsonb_agg(to_jsonb(x)) from reviews x), '[]'::jsonb),
+    'messages', coalesce((select jsonb_agg(to_jsonb(x)) from messages x), '[]'::jsonb),
+    'customers', coalesce((select jsonb_agg(to_jsonb(x)) from profiles x), '[]'::jsonb),
+    'admins', coalesce((select jsonb_agg(to_jsonb(x)) from admins x), '[]'::jsonb),
+    'giftCards', coalesce((select jsonb_agg(to_jsonb(x)) from gift_cards x), '[]'::jsonb),
+    'costs', coalesce((select jsonb_agg(to_jsonb(x)) from product_costs x), '[]'::jsonb),
+    'subscribers', coalesce((select jsonb_agg(to_jsonb(x)) from subscribers x), '[]'::jsonb));
+  c := jsonb_build_object('orders', jsonb_array_length(d -> 'orders'), 'customers', jsonb_array_length(d -> 'customers'), 'reviews', jsonb_array_length(d -> 'reviews'), 'messages', jsonb_array_length(d -> 'messages'));
+  insert into backups (kind, bytes, counts, data) values (k, length(d::text), c, d) returning id into new_id;
+  delete from backups where kind = 'auto' and id not in (select id from backups where kind = 'auto' order by id desc limit 30);
+  return new_id;
+end $$;
+revoke all on function ee_make_backup(text) from public, anon, authenticated;
+
+create or replace function admin_create_backup() returns bigint
+language plpgsql security definer set search_path = public as $$
+declare bid bigint;
+begin
+  if not is_owner() then raise exception 'not allowed'; end if;
+  bid := ee_make_backup('manual');
+  perform ee_log('backup.manual', bid::text, '{}'::jsonb);
+  return bid;
+end $$;
+grant execute on function admin_create_backup() to authenticated;
+
+-- called when an owner opens the admin: makes a backup only if the last one is more than 20 hours old
+create or replace function admin_backup_if_due() returns boolean
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_owner() then return false; end if;
+  if exists (select 1 from backups where at > now() - interval '20 hours') then return false; end if;
+  perform ee_make_backup('auto');
+  return true;
+end $$;
+grant execute on function admin_backup_if_due() to authenticated;
+
+-- the data of one backup, owners only (the list omits it to stay light)
+create or replace function admin_get_backup(bid bigint) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not is_owner() then raise exception 'not allowed'; end if;
+  return (select data from backups where id = bid);
+end $$;
+grant execute on function admin_get_backup(bigint) to authenticated;
+
+-- A backup every night at 20:00 UTC (01:30 in Sri Lanka). Needs the pg_cron extension (Supabase: Database > Extensions).
+-- If it is not available this is skipped, and the app still backs up whenever an owner opens the admin.
+do $$ begin
+  create extension if not exists pg_cron;
+  perform cron.schedule('ee-daily-backup', '0 20 * * *', 'select ee_make_backup(''auto'')');
+exception when others then
+  raise notice 'pg_cron is not available, so backups will run when an owner opens the admin instead';
+end $$;
+
+-- log bulk and corporate enquiries (they arrive as messages) and deleted messages
+create or replace function ee_log_message() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.data ->> 'kind' = 'bulk' then
+      insert into activity_log (actor, action, target, detail) values ('customer', 'bulk.enquiry', new.data ->> 'company', jsonb_build_object('name', new.data ->> 'name', 'qty', new.data ->> 'qty', 'occasion', new.data ->> 'occasion'));
+    end if;
+    return new;
+  end if;
+  if is_admin() then perform ee_log('message.delete', coalesce(old.data ->> 'name', ''), jsonb_build_object('kind', coalesce(old.data ->> 'kind', 'message'))); end if;
+  return old;
+end $$;
+drop trigger if exists messages_log on messages;
+create trigger messages_log after insert or delete on messages for each row execute function ee_log_message();
+
 -- ================================================================== after running this file
 -- 1. Authentication > Users > Add user: create your admin login (email + password).
 -- 2. Run:  insert into admins (email) values ('your-admin@email.com');
