@@ -192,18 +192,41 @@ export function ReviewsView() {
 /* ------------------------------------------------------------------- Messages */
 export function Messages() {
   const msgs = useStored<Message[]>('messages', EMPTY);
+  const [show, setShow] = useState<'all' | 'bulk' | 'other'>('all');
+  const bulk = msgs.filter((m) => m.kind === 'bulk');
+  const shown = msgs.filter((m) => show === 'all' || (show === 'bulk') === (m.kind === 'bulk')).slice().reverse();
+  const unreadBulk = bulk.filter((m) => !m.read).length;
   return (
     <>
       <H1>Messages</H1>
-      {msgs.length === 0 && <div className="muted">No messages yet.</div>}
+      {bulk.length > 0 && (
+        <div className="filters">
+          <Chip on={show === 'all'} onClick={() => setShow('all')}>All ({msgs.length})</Chip>
+          <Chip on={show === 'bulk'} onClick={() => setShow('bulk')}>Bulk and corporate ({bulk.length}{unreadBulk ? ', ' + unreadBulk + ' new' : ''})</Chip>
+          <Chip on={show === 'other'} onClick={() => setShow('other')}>Other messages ({msgs.length - bulk.length})</Chip>
+        </div>
+      )}
+      {shown.length === 0 && <div className="muted">No messages yet.</div>}
       <div className="stack" style={{ gap: 12 }}>
-        {msgs.slice().reverse().map((m) => (
-          <div key={m.id} className="card" style={{ padding: 16, display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+        {shown.map((m) => (
+          <div key={m.id} className="card" style={{ padding: 16, display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', borderLeft: m.kind === 'bulk' ? '4px solid var(--a-brand, #8F6642)' : undefined }}>
             <div style={{ flex: 1, minWidth: 240 }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{m.name} <span style={{ fontWeight: 400, color: 'var(--muted2)' }}>{m.email} · {fmtDate(m.date, { day: 'numeric', month: 'short' })}</span></div>
-              <div style={{ fontSize: 16, lineHeight: '24px', marginTop: 4 }}>{m.text}</div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>
+                {m.kind === 'bulk' && <span className="tag" style={{ background: '#FEF3C7', color: '#8A4B00', marginRight: 8 }}>Bulk order enquiry</span>}
+                {m.name}{m.company ? ' · ' + m.company : ''} <span style={{ fontWeight: 400, color: 'var(--muted2)' }}>{m.email}{m.phone ? ' · ' + m.phone : ''} · {fmtDate(m.date, { day: 'numeric', month: 'short' })}</span>
+              </div>
+              {m.kind === 'bulk' && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '8px 0 0' }}>
+                  {m.qty ? <span className="tag" style={{ background: 'var(--cream)', color: 'var(--text2)' }}>{m.qty} candles</span> : null}
+                  {m.occasion ? <span className="tag" style={{ background: 'var(--cream)', color: 'var(--text2)' }}>{m.occasion}</span> : null}
+                  {m.needBy ? <span className="tag" style={{ background: 'var(--cream)', color: 'var(--text2)' }}>Needed by {fmtDate(m.needBy, { day: 'numeric', month: 'short', year: 'numeric' })}</span> : null}
+                </div>
+              )}
+              <div style={{ fontSize: 16, lineHeight: '24px', marginTop: 6, whiteSpace: 'pre-line' }}>{m.text}</div>
             </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              {m.kind === 'bulk' && m.phone && <a className="btn-xs" href={waLink(m.phone, 'Hi ' + m.name.split(' ')[0] + ', thanks for your bulk order enquiry with Ember & Eve.')} target="_blank" rel="noreferrer">WhatsApp</a>}
+              <a className="btn-xs" href={'mailto:' + m.email + '?subject=' + encodeURIComponent('Your Ember & Eve enquiry')}>Email</a>
               <button type="button" className="btn-xs" style={{ background: m.read ? '#fff' : 'var(--cream)' }} onClick={() => set('messages', msgs.map((y) => (y.id === m.id ? { ...y, read: !y.read } : y)))}>{m.read ? 'Mark unread' : 'Mark read'}</button>
               <button type="button" className="btn-xs danger" onClick={() => set('messages', msgs.filter((y) => y.id !== m.id))}>Delete</button>
             </div>

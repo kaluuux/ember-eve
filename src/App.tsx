@@ -25,6 +25,8 @@ const Faq = lazy(() => import('./pages/Info').then((m) => ({ default: m.Faq })))
 const Doc = lazy(() => import('./pages/Info').then((m) => ({ default: m.Doc })));
 const NotFound = lazy(() => import('./pages/Info').then((m) => ({ default: m.NotFound })));
 const Guides = lazy(() => import('./pages/Guides').then((m) => ({ default: m.Guides })));
+const Bulk = lazy(() => import('./pages/Bulk').then((m) => ({ default: m.Bulk })));
+const Season = lazy(() => import('./pages/Season').then((m) => ({ default: m.Season })));
 const Track = lazy(() => import('./pages/Track').then((m) => ({ default: m.Track })));
 const Admin = lazy(() => import('./admin/Admin').then((m) => ({ default: m.Admin })));
 const Invoice = lazy(() => import('./pages/Invoice').then((m) => ({ default: m.Invoice })));
@@ -68,6 +70,8 @@ function renderPage(route: Route) {
     case 'about': return <About />;
     case 'contact': return <Contact />;
     case 'faq': return <Faq />;
+    case 'bulk': return <Bulk />;
+    case 'season': return <Season route={route} />;
     case 'guides': return <Guides route={route} />;
     default: return DOC_KEYS.includes(route.name) ? <Doc name={route.name} /> : <NotFound />;
   }

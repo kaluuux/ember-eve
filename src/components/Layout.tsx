@@ -117,8 +117,9 @@ export function Layout({ children }: { children: ReactNode }) {
               {categories.map((c) => <a key={c.id} role="menuitem" href={'/shop?cat=' + c.id} {...(onShop && r.q.cat === c.id ? { className: 'on', 'aria-current': 'page' as const } : {})}>{c.name.replace(' Candles', '')}</a>)}
               {seasonal.length > 0 && <a role="menuitem" href="/shop?seasonal=1" {...(seasonalMode ? { className: 'on', 'aria-current': 'page' as const } : {})}>{t('Seasonal')}</a>}
             </NavDropdown>
-            {liveSeasons.map((x) => <a key={x.id} href={'/shop?season=' + x.id} className={'season-link' + (onShop && !seasonalMode && r.q.season === x.id ? ' on' : '')} {...(onShop && !seasonalMode && r.q.season === x.id ? { 'aria-current': 'page' as const } : {})}>{x.name.replace(' Collection', '')}</a>)}
+            {liveSeasons.map((x) => <a key={x.id} href={'/season/' + x.id} className={'season-link' + (r.name === 'season' && r.arg === x.id ? ' on' : '')} {...(r.name === 'season' && r.arg === x.id ? { 'aria-current': 'page' as const } : {})}>{x.name.replace(' Collection', '')}</a>)}
             <a href="/gifts" {...here('gifts')}>{t('Gift Box')}</a>
+            <a href="/bulk" {...here('bulk')}>{t('Bulk Orders')}</a>
             <a href="/track" {...here('track')}>{t('Track Order')}</a>
             <a href="/about" {...here('about')}>{t('About')}</a>
             <a href="/contact" {...here('contact')}>{t('Contact')}</a>
@@ -136,9 +137,10 @@ export function Layout({ children }: { children: ReactNode }) {
                 <div className="mm-sub">
                   {categories.map((c) => <a key={c.id} href={'/shop?cat=' + c.id}>{c.name}</a>)}
                   {seasonal.length > 0 && <a href="/shop?seasonal=1">{t('Seasonal')}</a>}
-                  {liveSeasons.map((x) => <a key={x.id} href={'/shop?season=' + x.id} className="season-link">{x.name.replace(' Collection', '')}</a>)}
+                  {liveSeasons.map((x) => <a key={x.id} href={'/season/' + x.id} className="season-link">{x.name.replace(' Collection', '')}</a>)}
                 </div>
                 <a href="/gifts" {...here('gifts')}>{t('Gift Box')}</a>
+            <a href="/bulk" {...here('bulk')}>{t('Bulk Orders')}</a>
                 {remote && settings.giftCardsOn && <a href="/gift-cards" {...here('gift-cards')}>{t('Gift Cards')}</a>}
                 <a href="/track" {...here('track')}>{t('Track Order')}</a>
                 <a href="/about" {...here('about')}>{t('About')}</a>
@@ -179,7 +181,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 {settings.pickupAddress && <span>{settings.pickupAddress}</span>}
               </div>
             </div>
-            <FooterCol title={t('Shop')} links={[['All Candles', '/shop'], ['Gift Box', '/gifts'], ...(remote && settings.giftCardsOn ? [['Gift Cards', '/gift-cards'] as [string, string]] : []), ['Colour Finder', '/finder'], ['Candle Guides', '/guides']]} />
+            <FooterCol title={t('Shop')} links={[['All Candles', '/shop'], ['Gift Box', '/gifts'], ...(remote && settings.giftCardsOn ? [['Gift Cards', '/gift-cards'] as [string, string]] : []), ['Colour Finder', '/finder'], ['Corporate and Bulk', '/bulk'], ['Candle Guides', '/guides']]} />
             <FooterCol title={t('Help')} links={[['FAQ', '/faq'], ['Shipping and Returns', '/shipping'], ['Candle Care', '/care'], ['Track Order', '/track'], ['Contact', '/contact']]} />
             <FooterCol title={t('Company')} links={[['About', '/about'], ['Privacy Policy', '/privacy'], ['Terms', '/terms'], ['Staff Login', '/admin']]} />
             <div className="fcol">

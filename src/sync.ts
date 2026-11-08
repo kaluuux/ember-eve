@@ -590,6 +590,30 @@ export async function removeAdmin(email: string): Promise<string> {
   return error ? (/last (admin|owner)/.test(error.message) ? 'You cannot remove the last owner.' : 'Could not remove: ' + error.message) : '';
 }
 
+/* ------------------------------------------------------------------ backups */
+export interface BackupRow { id: number; at: string; kind: 'auto' | 'manual'; bytes: number; counts: { orders?: number; customers?: number; reviews?: number; messages?: number } }
+export async function listBackups(): Promise<BackupRow[] | null> {
+  if (!sb) return null;
+  const { data, error } = await sb.from('backups').select('id,at,kind,bytes,counts').order('id', { ascending: false }).limit(40);
+  return error ? null : ((data ?? []) as BackupRow[]);
+}
+/** Snapshot now (owner only). Returns an error message, or '' when done. */
+export async function createBackup(): Promise<string> {
+  if (!sb) return 'Not connected.';
+  const { error } = await sb.rpc('admin_create_backup');
+  return error ? 'Could not back up. Run the latest schema.sql in Supabase first.' : '';
+}
+/** Called when an owner opens the admin: the database makes a backup only if the last one is over 20 hours old. */
+export async function backupIfDue(): Promise<void> {
+  if (!sb) return;
+  try { await sb.rpc('admin_backup_if_due'); } catch { /* the schema may not have been updated yet */ }
+}
+export async function getBackup(id: number): Promise<Record<string, unknown> | null> {
+  if (!sb) return null;
+  const { data, error } = await sb.rpc('admin_get_backup', { bid: id });
+  return error ? null : (data as Record<string, unknown>);
+}
+
 /* ------------------------------------------------------------------ shop images */
 /** Shrink an image so it loads fast. Photos become JPEG; QR codes stay PNG so they stay sharp. */
 async function shrinkImage(file: File, max: number, type: 'image/jpeg' | 'image/png'): Promise<Blob> {

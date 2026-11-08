@@ -4,7 +4,8 @@ import { ColourStudio } from '../components/ColourStudio';
 import { Embers, Ico, Newsletter, Reveal } from '../components/Flair';
 import { useApp } from '../AppContext';
 import { Ph } from '../components/ui';
-import { SHELVES } from '../commerce';
+import { SHELVES, seasonTiming } from '../commerce';
+import { Countdown } from '../components/Countdown';
 import type { Product } from '../types';
 import { useT } from '../i18n';
 
@@ -73,10 +74,22 @@ const TILE_TINTS = ['linear-gradient(150deg,#F7E4E7,#EBC9D0)', 'linear-gradient(
 
 export function Home() {
   const t = useT();
-  const { reviews, categories, liveSeasons, active, shelf, settings } = useApp();
+  const { reviews, categories, liveSeasons, active, shelf, settings, seasons, products } = useApp();
+  // a banner for the nearest season: closing within a month, or opening within six weeks
+  const banner = seasons
+    .filter((s) => products.some((p) => p.active && p.season === s.id))
+    .map((s) => ({ s, tm: seasonTiming(s) }))
+    .filter((x) => x.tm.at && !x.tm.forced && x.tm.at.getTime() - Date.now() <= (x.tm.state === 'live' ? 30 : 42) * 864e5)
+    .sort((a, b) => a.tm.at!.getTime() - b.tm.at!.getTime())[0];
   return (
     <>
       <Hero />
+      {banner && (
+        <a href={'/season/' + banner.s.id} className="season-bar">
+          <span>{banner.s.name}{banner.tm.state === 'live' ? ' ends in ' : ' opens in '}<Countdown to={banner.tm.at!} compact /></span>
+          <span className="go">{banner.tm.state === 'live' ? 'Shop now' : 'See what is coming'} →</span>
+        </a>
+      )}
 
       <section className="promise" aria-label={t('Why Ember & Eve')}>
         <Reveal stagger className="promise-grid">
@@ -90,7 +103,7 @@ export function Home() {
       </section>
 
       {liveSeasons.map((se) => (
-        <ShelfSection key={se.id} title={se.name} blurb={se.blurb} href={'shop?season=' + se.id} items={active.filter((p) => p.season === se.id)} tinted />
+        <ShelfSection key={se.id} title={se.name} blurb={se.blurb} href={'season/' + se.id} items={active.filter((p) => p.season === se.id)} tinted />
       ))}
 
       {categories.length > 0 && (

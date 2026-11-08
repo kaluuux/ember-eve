@@ -113,6 +113,22 @@ export function seasonLive(s: Season, now = new Date()): boolean {
   const t = md(now);
   return s.from <= s.to ? t >= s.from && t <= s.to : t >= s.from || t <= s.to;
 }
+/**
+ * When a season next opens or closes. Seasons repeat every year (dates are MM-DD), so this is the next time that happens.
+ * state 'live' counts down to the closing time, 'upcoming' to the next opening, and `at` is null when an override is on or off.
+ */
+export function seasonTiming(s: Season, now = new Date()): { state: 'live' | 'upcoming'; at: Date | null; forced: boolean } {
+  const at = (mdText: string, endOfDay: boolean, after: Date, strict: boolean) => {
+    const [m, d] = mdText.split('-').map(Number);
+    let c = new Date(after.getFullYear(), m - 1, d, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0);
+    if (strict ? c.getTime() <= after.getTime() : c.getTime() < after.getTime()) c = new Date(after.getFullYear() + 1, m - 1, d, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0);
+    return c;
+  };
+  if (s.force === 'on') return { state: 'live', at: null, forced: true };
+  if (s.force === 'off') return { state: 'upcoming', at: null, forced: true };
+  if (seasonLive(s, now)) return { state: 'live', at: at(s.to, true, now, false), forced: false };
+  return { state: 'upcoming', at: at(s.from, false, now, true), forced: false };
+}
 /** Products a customer may see: active, and not in a season that is currently closed */
 export function visibleProducts(products: Product[], seasons: Season[], now = new Date()): Product[] {
   const live = new Set(seasons.filter((s) => seasonLive(s, now)).map((s) => s.id));

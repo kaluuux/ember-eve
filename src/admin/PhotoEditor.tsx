@@ -20,14 +20,17 @@ export type CropResult = Blob | 'original' | null;
 /* ------------------------------------------------------------------ geometry */
 interface Centre { x: number; y: number }
 
+/** Keep the frame on the photo; when the frame is bigger than the photo along an axis, centre the photo in it. */
+const place = (v: number, size: number, region: number) => (region >= size ? (size - region) / 2 : Math.min(Math.max(v, 0), size - region));
+
 function geom(img: HTMLImageElement, rot: number, A: number, zoom: number, c: Centre) {
   const odd = rot % 2 === 1;
   const sw = odd ? img.naturalHeight : img.naturalWidth, sh = odd ? img.naturalWidth : img.naturalHeight;
+  // zoom 1 shows the whole photo (the frame is as big as the photo needs, with white around it if the shapes differ); zooming in crops closer
   let rw: number, rh: number;
-  if (sw / sh > A) { rh = sh; rw = sh * A; } else { rw = sw; rh = sw / A; }
+  if (sw / sh > A) { rw = sw; rh = sw / A; } else { rh = sh; rw = sh * A; }
   rw /= zoom; rh /= zoom;
-  const x0 = Math.min(Math.max(c.x * sw - rw / 2, 0), sw - rw);
-  const y0 = Math.min(Math.max(c.y * sh - rh / 2, 0), sh - rh);
+  const x0 = place(c.x * sw - rw / 2, sw, rw), y0 = place(c.y * sh - rh / 2, sh, rh);
   return { sw, sh, rw, rh, x0, y0 };
 }
 
@@ -102,7 +105,7 @@ export function PhotoEditor({ src, folder, n, of, onClose }: { src: File | strin
   const move = (dx: number, dy: number) => {
     if (!img) return;
     const g = geom(img, rot, A, zoom, c);
-    const x0 = Math.min(Math.max(g.x0 + dx, 0), g.sw - g.rw), y0 = Math.min(Math.max(g.y0 + dy, 0), g.sh - g.rh);
+    const x0 = place(g.x0 + dx, g.sw, g.rw), y0 = place(g.y0 + dy, g.sh, g.rh);
     setC({ x: (x0 + g.rw / 2) / g.sw, y: (y0 + g.rh / 2) / g.sh });
   };
   const onDown = (e: React.PointerEvent) => { e.currentTarget.setPointerCapture(e.pointerId); drag.current = { x: e.clientX, y: e.clientY, cx: e.clientX, cy: e.clientY }; };
@@ -158,7 +161,7 @@ export function PhotoEditor({ src, folder, n, of, onClose }: { src: File | strin
                 {showGuide && <div className="pe-guide" style={{ width: hFrac * 100 + '%', height: vFrac * 100 + '%' }}><span>Always visible</span></div>}
               </div>
               <div className="pe-controls">
-                <label className="pe-zoom">Zoom
+                <label className="pe-zoom">Zoom (1× shows the whole photo)
                   <input type="range" min={1} max={4} step={0.01} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} aria-label="Zoom" />
                 </label>
                 <div className="pe-row">
