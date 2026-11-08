@@ -25,6 +25,14 @@ export function upgradeLegacyHash() {
   if (location.hash.startsWith('#/')) history.replaceState(null, '', location.hash.slice(1));
 }
 
+/** Refreshing the shop starts it fresh: search words and filters in the URL (?q=, ?cat=, ?shelf=, ?season=) are dropped.
+ *  Only a real reload does this, so shared links and the Back button still open the filtered page. */
+export function clearShopFiltersOnReload() {
+  const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+  if (nav?.type !== 'reload' || !location.search) return;
+  if (location.pathname.replace(/\/+$/, '') === '/shop') history.replaceState(null, '', '/shop');
+}
+
 /** Turn ordinary same-site <a href="/..."> clicks into in-app navigation (no full reload). */
 export function installLinkInterceptor() {
   document.addEventListener('click', (e) => {

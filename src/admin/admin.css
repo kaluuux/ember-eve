@@ -213,3 +213,10 @@
 .act-row .when { color: var(--a-muted); }
 @media (max-width: 720px) { .act-row { grid-template-columns: 1fr; gap: 2px; } }
 .gc-code { font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: .04em; font-weight: 600; }
+
+/* sortable table headers + quick eye toggle (admin Products) */
+.th-sort { font: inherit; color: inherit; background: none; border: none; padding: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; text-align: left; }
+.th-sort:hover { color: var(--ink); }
+.th-arrow { font-size: 10px; opacity: 0.55; }
+th[aria-sort="ascending"] .th-arrow, th[aria-sort="descending"] .th-arrow { opacity: 1; color: var(--brown); }
+.eye-btn { padding: 6px 8px; line-height: 0; vertical-align: middle; }
