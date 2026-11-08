@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { EMPTY, get, money, set, useStored } from '../store';
 import { Chip, ErrorText } from '../components/ui';
 import { seasonLive } from '../commerce';
@@ -15,6 +15,18 @@ const LBL = { fontSize: 12, fontWeight: 600, color: 'var(--muted2)' } as const;
 const uid = () => Math.random().toString(36).slice(2, 8);
 const PINS: [Pin, string][] = [['best', 'Best Selling'], ['trending', 'Trending'], ['new', 'New']];
 
+type SortKey = 'status' | 'name' | 'base' | 'cost' | 'sale' | 'stock';
+type SortState = { key: SortKey; dir: 1 | -1 };
+
+/** Small eye icon: open = shown in the store, slashed = hidden. */
+const Eye = ({ open }: { open: boolean }) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+    <circle cx="12" cy="12" r="3" />
+    {!open && <path d="M3 3l18 18" />}
+  </svg>
+);
+
 /* ------------------------------------------------------------------- Products */
 export function ProductsView({ flash }: { flash: Flash }) {
   const products = useStored<Product[]>('products', EMPTY);
@@ -26,9 +38,57 @@ export function ProductsView({ flash }: { flash: Flash }) {
   const [q, setQ] = useState('');
   const [pct, setPct] = useState('');
   const costs = useStored<Costs>('costs', NO_COSTS);
+  // default order: Active on top, Hidden at the bottom (sort is stable, so the original order is kept inside each group)
+  const [sort, setSort] = useState<SortState>({ key: 'status', dir: 1 });
+  const [sel, setSel] = useState<Set<number>>(new Set());
+  const allBox = useRef<HTMLInputElement>(null);
 
-  const rows = products.filter((p) => (!cat || p.cat === cat) && (!q || p.name.toLowerCase().includes(q.toLowerCase())));
-  const patch = (id: number, o: Partial<Product>) => set('products', get<Product[]>('products', []).map((x) => (x.id === id ? { ...x, ...o } : x)));
+  const rows = useMemo(() => {
+    const list = products.filter((p) => (!cat || p.cat === cat) && (!q || p.name.toLowerCase().includes(q.toLowerCase())));
+    // a missing value (no cost set, made-to-order stock) always sorts last, whichever way the column is sorted
+    const val = (p: Product): string | number | null => {
+      switch (sort.key) {
+        case 'status': return p.active ? 0 : 1;
+        case 'name': return p.name.toLowerCase();
+        case 'base': return p.base;
+        case 'cost': return costs[String(p.id)] ?? null;
+        case 'sale': return p.salePct || 0;
+        case 'stock': return p.stock;
+      }
+    };
+    return list.slice().sort((a, b) => {
+      const x = val(a), y = val(b);
+      if (x === null || y === null) return x === y ? 0 : x === null ? 1 : -1;
+      const c = typeof x === 'string' ? x.localeCompare(y as string) : x - (y as number);
+      return c * sort.dir;
+    });
+  }, [products, cat, q, sort, costs]);
+
+  const selShown = rows.filter((p) => sel.has(p.id));
+  const allSelected = rows.length > 0 && selShown.length === rows.length;
+  useEffect(() => { if (allBox.current) allBox.current.indeterminate = selShown.length > 0 && !allSelected; }, [selShown.length, allSelected]);
+
+  const sortBy = (key: SortKey) => setSort((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: 1 }));
+  const toggleOne = (id: number) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const toggleAll = () => setSel(allSelected ? new Set() : new Set(rows.map((p) => p.id)));
+  const setActive = (ids: number[], active: boolean) => {
+    const idSet = new Set(ids);
+    set('products', get<Product[]>('products', []).map((p) => (idSet.has(p.id) ? { ...p, active } : p)));
+  };
+  const bulkStatus = (active: boolean) => {
+    const ids = selShown.map((p) => p.id);
+    setActive(ids, active);
+    setSel(new Set());
+    flash(ids.length + (ids.length === 1 ? ' product ' : ' products ') + (active ? 'shown in the store' : 'hidden from the store'));
+  };
+  const th = (k: SortKey, children: ReactNode) => (
+    <th key={k} aria-sort={sort.key === k ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}>
+      <button type="button" className="th-sort" onClick={() => sortBy(k)}>
+        {children}<span aria-hidden="true" className="th-arrow">{sort.key === k ? (sort.dir === 1 ? '▲' : '▼') : '↕'}</span>
+      </button>
+    </th>
+  );
+  const patch =(id: number, o: Partial<Product>) => set('products', get<Product[]>('products', []).map((x) => (x.id === id ? { ...x, ...o } : x)));
   const blank = (): Product => ({
     id: 0, name: '', cat: categories[0]?.id ?? '', blurb: '', desc: '', base: 0, groups: [], colors: true, custom: true, sticker: false, stock: null,
     salePct: 0, pins: [], season: '', active: true, featured: false, created: new Date().toISOString(),
@@ -61,14 +121,31 @@ export function ProductsView({ flash }: { flash: Flash }) {
         <input className="input" style={{ width: 90 }} placeholder="+10 / -10" aria-label="Percent price change" value={pct} onChange={(e) => setPct(e.target.value)} />
         <button type="button" className="btn-xs" onClick={bulkPrice}>Change prices of {rows.length} shown</button>
       </div>
+      {selShown.length > 0 && (
+        <div className="card" role="region" aria-label="Bulk actions" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16, padding: '12px 16px', background: 'var(--cream)' }}>
+          <b>{selShown.length} selected</b>
+          <button type="button" className="btn-xs" onClick={() => bulkStatus(true)}>Show in store</button>
+          <button type="button" className="btn-xs" onClick={() => bulkStatus(false)}>Hide from store</button>
+          <button type="button" className="btn-xs" onClick={() => setSel(new Set())}>Clear selection</button>
+        </div>
+      )}
       <div className="card flush" style={{ overflowX: 'auto' }}>
         <table className="table">
-          <thead><tr><th>Product</th><th>Base price</th><th>Cost</th><th>Sale %</th><th>Stock</th><th>Shelves</th><th>Status</th><th /></tr></thead>
+          <thead>
+            <tr>
+              <th style={{ width: 36 }}><input ref={allBox} type="checkbox" aria-label="Select all shown products" checked={allSelected} onChange={toggleAll} /></th>
+              {th('name', 'Product')}{th('base', 'Base price')}{th('cost', 'Cost')}{th('sale', 'Sale %')}{th('stock', 'Stock')}
+              <th>Shelves</th>
+              {th('status', 'Status')}
+              <th />
+            </tr>
+          </thead>
           <tbody>
             {rows.map((p) => {
               const se = seasons.find((x) => x.id === p.season);
               return (
-                <tr key={p.id}>
+                <tr key={p.id} style={sel.has(p.id) ? { background: 'var(--cream)' } : undefined}>
+                  <td><input type="checkbox" aria-label={'Select ' + p.name} checked={sel.has(p.id)} onChange={() => toggleOne(p.id)} /></td>
                   <td style={{ fontWeight: 600 }}>
                     {p.name}
                     <div style={{ fontSize: 12, color: 'var(--muted2)', fontWeight: 400 }}>
@@ -88,11 +165,20 @@ export function ProductsView({ flash }: { flash: Flash }) {
                     </div>
                   </td>
                   <td>
-                    <button type="button" className="tag" onClick={() => patch(p.id, { active: !p.active })} style={{ border: 'none', cursor: 'pointer', background: p.active ? '#DCFCE7' : 'var(--sand-l)', color: p.active ? '#166534' : 'var(--muted)' }}>
-                      {p.active ? 'Active' : 'Hidden'}
-                    </button>
+                    {p.active && se && !seasonLive(se) ? (
+                      <span className="tag" style={{ background: '#FEF3C7', color: '#8A4B00' }} title={'Switched on, but customers cannot see it: its season (' + se.name + ') is closed right now. Set Season to Year-round in Edit, or force the season on in Catalogue setup.'}>
+                        Off season
+                      </span>
+                    ) : (
+                      <span className="tag" style={{ background: p.active ? '#DCFCE7' : 'var(--sand-l)', color: p.active ? '#166534' : 'var(--muted)' }}>
+                        {p.active ? 'Active' : 'Hidden'}
+                      </span>
+                    )}
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button type="button" className="btn-xs eye-btn" title={p.active ? 'Hide from store' : 'Show in store'} aria-label={(p.active ? 'Hide ' : 'Show ') + p.name + (p.active ? ' from the store' : ' in the store')} onClick={() => setActive([p.id], !p.active)}>
+                      <Eye open={p.active} />
+                    </button>{' '}
                     <button type="button" className="btn-xs" onClick={() => setEditing(JSON.parse(JSON.stringify(p)))}>Edit</button>{' '}
                     <button type="button" className="btn-xs" onClick={() => duplicate(p)}>Duplicate</button>{' '}
                     <button type="button" className="btn-xs danger" onClick={() => {
@@ -103,7 +189,7 @@ export function ProductsView({ flash }: { flash: Flash }) {
                 </tr>
               );
             })}
-            {rows.length === 0 && <tr><td colSpan={8} className="muted">No products match.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={9} className="muted">No products match.</td></tr>}
           </tbody>
         </table>
       </div>

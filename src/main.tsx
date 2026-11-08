@@ -9,7 +9,7 @@ import './glow.css';
 import './mobile.css';
 import { startSync } from './sync';
 import { initLang } from './i18n';
-import { installLinkInterceptor, upgradeLegacyHash } from './router';
+import { clearShopFiltersOnReload, installLinkInterceptor, upgradeLegacyHash } from './router';
 
 // a friend's share link (?ref=CODE) is remembered until checkout
 try {
@@ -17,6 +17,7 @@ try {
   if (ref && /^[A-Za-z0-9]{4,12}$/.test(ref)) localStorage.setItem('ee_ref', ref.toUpperCase());
 } catch { /* ignore */ }
 upgradeLegacyHash();
+clearShopFiltersOnReload();
 installLinkInterceptor();
 startSync();
 

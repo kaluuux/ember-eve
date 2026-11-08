@@ -13,7 +13,7 @@ type Sort = 'feat' | 'lo' | 'hi' | 'az';
 /** Filters come from the URL (?cat=, ?shelf=, ?season=, ?q=) so home links and the menu can deep-link here. */
 export function Shop({ route }: { route: Route }) {
   const t = useT();
-  const { active, seasonal: seasonalAll, seasons, categories, liveSeasons, shelf } = useApp();
+  const { products, seasonal: seasonalAll, seasons, categories, liveSeasons, shelf } = useApp();
   const hydrated = useHydrated();
   const cat = route.q.cat || '';
   const shelfId = (route.q.shelf || '') as Shelf | '';
@@ -26,14 +26,20 @@ export function Shop({ route }: { route: Route }) {
   const [stockOnly, setStockOnly] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  const top = useMemo(() => Math.max(100, ...active.map((p) => lowestPrice(p))), [active]);
+  /** The shop lists every switched-on candle, whether or not its season is open; the Season filter narrows it down. */
+  const everything = useMemo(() => products.filter((p) => p.active), [products]);
+  const top = useMemo(() => Math.max(100, ...everything.map((p) => lowestPrice(p))), [everything]);
   const step = top > 5000 ? 100 : 50;
   const max = Math.round((top * capPct) / 100 / step) * step || top;
+  /** Seasons that have at least one candle, and whether any candle is year-round */
+  const seasonChips = useMemo(() => seasons.filter((s) => everything.some((p) => p.season === s.id)), [seasons, everything]);
+  const hasYearRound = useMemo(() => everything.some((p) => !p.season), [everything]);
 
   const list = useMemo(() => {
-    let l = seasonalMode ? seasonalAll.slice() : shelfId ? shelf(shelfId) : active.slice();
+    let l = seasonalMode ? seasonalAll.slice() : shelfId ? shelf(shelfId) : everything.slice();
     if (cat) l = l.filter((p) => p.cat === cat);
-    if (season) l = l.filter((p) => p.season === season);
+    if (season === 'none') l = l.filter((p) => !p.season);
+    else if (season) l = l.filter((p) => p.season === season);
     if (q) l = l.filter((p) => (p.name + ' ' + p.blurb + ' ' + p.groups.map((g) => g.options.map((o) => o.label).join(' ')).join(' ')).toLowerCase().includes(q));
     if (capPct < 100) l = l.filter((p) => lowestPrice(p) <= max);
     if (stockOnly) l = l.filter(inStock);
@@ -41,7 +47,7 @@ export function Shop({ route }: { route: Route }) {
     if (sort === 'hi') l.sort((a, b) => lowestPrice(b) - lowestPrice(a));
     if (sort === 'az') l.sort((a, b) => a.name.localeCompare(b.name));
     return l;
-  }, [active, seasonalAll, seasonalMode, shelf, shelfId, cat, season, q, capPct, max, stockOnly, sort]);
+  }, [everything, seasonalAll, seasonalMode, shelf, shelfId, cat, season, q, capPct, max, stockOnly, sort]);
 
   const link = (o: { cat?: string; shelf?: string; season?: string }) => {
     const n = { cat, shelf: shelfId, season, seasonal: seasonalMode ? '1' : '', ...o };
@@ -51,7 +57,8 @@ export function Shop({ route }: { route: Route }) {
     go('shop' + (qs.toString() ? '?' + qs.toString() : ''));
   };
   const clear = () => { setCapPct(100); setStockOnly(false); go('shop'); };
-  const title = seasonalMode ? (season ? seasons.find((s) => s.id === season)?.name : t('Seasonal Candles')) : shelfId ? t(SHELVES.find((s) => s.id === shelfId)?.title ?? '') : season ? liveSeasons.find((s) => s.id === season)?.name : categories.find((c) => c.id === cat)?.name;
+  const seasonName = season === 'none' ? t('Year-round') : seasons.find((s) => s.id === season)?.name;
+  const title = seasonalMode ? (season ? seasonName : t('Seasonal Candles')) : shelfId ? t(SHELVES.find((s) => s.id === shelfId)?.title ?? '') : season ? seasonName : categories.find((c) => c.id === cat)?.name;
 
   return (
     <section className="page">
@@ -82,23 +89,24 @@ export function Shop({ route }: { route: Route }) {
               {categories.map((c) => <Chip key={c.id} on={cat === c.id} onClick={() => link({ cat: c.id })}>{c.name}</Chip>)}
             </div>
           </div>
-          {seasonalMode ? (
-            <div>
-              <div className="label-s">{t('Season')}</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <Chip on={!season} onClick={() => link({ season: '' })}>{t('All seasons')}</Chip>
-                {seasons.filter((s) => seasonalAll.some((p) => p.season === s.id)).map((s) => (
-                  <Chip key={s.id} on={season === s.id} onClick={() => link({ season: s.id })}>{s.name.replace(' Collection', '')}{liveSeasons.some((l) => l.id === s.id) ? t(' · now') : ''}</Chip>
-                ))}
-              </div>
-            </div>
-          ) : (
+          {!seasonalMode && (
             <div>
               <div className="label-s">{t('Collections')}</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <Chip on={!shelfId && !season} onClick={() => link({ shelf: '', season: '' })}>{t('All')}</Chip>
-                {SHELVES.filter((s) => shelf(s.id).length > 0).map((s) => <Chip key={s.id} on={shelfId === s.id} onClick={() => link({ shelf: s.id, season: '' })}>{t(s.title)}</Chip>)}
-                {liveSeasons.map((s) => <Chip key={s.id} on={season === s.id} onClick={() => link({ season: s.id, shelf: '' })}>{s.name.replace(' Collection', '')}</Chip>)}
+                <Chip on={!shelfId} onClick={() => link({ shelf: '' })}>{t('All')}</Chip>
+                {SHELVES.filter((s) => shelf(s.id).length > 0).map((s) => <Chip key={s.id} on={shelfId === s.id} onClick={() => link({ shelf: s.id })}>{t(s.title)}</Chip>)}
+              </div>
+            </div>
+          )}
+          {seasonChips.length > 0 && (
+            <div>
+              <div className="label-s">{t('Season')}</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <Chip on={!season} onClick={() => link({ season: '' })}>{seasonalMode ? t('All seasons') : t('All')}</Chip>
+                {seasonChips.map((s) => (
+                  <Chip key={s.id} on={season === s.id} onClick={() => link({ season: s.id })}>{s.name.replace(' Collection', '')}{liveSeasons.some((l) => l.id === s.id) ? t(' · now') : ''}</Chip>
+                ))}
+                {!seasonalMode && hasYearRound && <Chip on={season === 'none'} onClick={() => link({ season: 'none' })}>{t('Year-round')}</Chip>}
               </div>
             </div>
           )}
