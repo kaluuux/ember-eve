@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import './admin.css';
 import { Icon } from './ui';
 import { EMPTY, get, set, useStored } from '../store';
 import { remote } from '../remote';
@@ -52,7 +51,7 @@ export function Admin({ route }: { route: Route }) {
     <div className="admin-shell">
       <aside className="admin-side">
         <div className="admin-brand">
-          <img src="/logo.png" alt="" width={38} height={38} />
+          <img src="/logo-sm.webp" alt="" width={38} height={38} />
           <div><b>Ember &amp; Eve</b><span>Shop admin</span></div>
         </div>
         <nav aria-label="Admin" style={{ display: 'contents' }}>
@@ -122,7 +121,7 @@ function AdminLogin() {
     <div className="admin-shell" style={{ minHeight: '100vh', alignItems: 'center', justifyContent: 'center', padding: 24, background: '#1E2023' }}>
       <form className="card stack" style={{ width: 'min(420px,100%)', gap: 16 }} onSubmit={(e) => e.preventDefault()} noValidate>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <img src="/logo.png" alt="Ember & Eve" width={48} height={48} style={{ borderRadius: 9999 }} />
+          <img src="/logo-sm.webp" alt="Ember & Eve" width={48} height={48} style={{ borderRadius: 9999 }} />
           <div>
             <div className="h3">Admin</div>
             <div className="muted">Ember &amp; Eve staff sign in</div>

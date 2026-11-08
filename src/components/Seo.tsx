@@ -13,9 +13,9 @@ const metaProp = (property: string, value: string) => setTag(`meta[property="${p
 
 /** Keeps the tab title, description, canonical link and structured data in step with the page being viewed. */
 export function Seo({ route }: { route: Route }) {
-  const { products, categories, seasons, settings } = useApp();
+  const { products, categories, seasons, settings, reviews } = useApp();
   useEffect(() => {
-    const m = metaFor({ path: '/' + [route.name === 'home' ? '' : route.name, route.arg].filter(Boolean).join('/'), query: route.q, origin: location.origin, data: { products, categories, seasons, settings } });
+    const m = metaFor({ path: '/' + [route.name === 'home' ? '' : route.name, route.arg].filter(Boolean).join('/'), query: route.q, origin: location.origin, data: { products, categories, seasons, settings, reviews: reviews.filter((r) => r.approved) } });
     document.title = m.title;
     metaName('description', m.description);
     metaName('robots', m.robots);
@@ -23,6 +23,6 @@ export function Seo({ route }: { route: Route }) {
     metaProp('og:title', m.title); metaProp('og:description', m.description); metaProp('og:image', m.image); metaProp('og:url', m.canonical); metaProp('og:type', m.type);
     document.head.querySelectorAll('script[data-ld]').forEach((n) => n.remove());
     m.jsonld.forEach((j) => { const s = document.createElement('script'); s.type = 'application/ld+json'; s.setAttribute('data-ld', ''); s.textContent = JSON.stringify(j); document.head.appendChild(s); });
-  }, [route.name, route.arg, route.q, products, categories, seasons, settings]);
+  }, [route.name, route.arg, route.q, products, categories, seasons, settings, reviews]);
   return null;
 }

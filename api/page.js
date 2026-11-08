@@ -6,9 +6,9 @@ import { injectHead, metaFor } from '../src/seo-core.js';
 import { loadData, originOf } from './_data.js';
 
 async function shell(origin) {
-  try { return await readFile(path.join(process.cwd(), 'dist', 'index.html'), 'utf8'); } catch { /* fall through to the static copy */ }
-  const r = await fetch(origin + '/index.html');
-  if (!r.ok) throw new Error('index.html not available');
+  try { return await readFile(path.join(process.cwd(), 'dist', 'shell.html'), 'utf8'); } catch { /* fall through to the static copy */ }
+  const r = await fetch(origin + '/shell.html');
+  if (!r.ok) throw new Error('shell.html not available');
   return await r.text();
 }
 

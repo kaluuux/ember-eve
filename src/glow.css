@@ -32,3 +32,6 @@ body::after { width: 520px; height: 520px; left: -200px; bottom: -180px; backgro
   body::before { width: 420px; height: 420px; right: -160px; top: -100px; }
   body::after { width: 360px; height: 360px; left: -170px; bottom: -150px; }
 }
+
+/* the logo glow animates a filter, which is costly on phones; keep it still there */
+@media (max-width: 760px) { .header .brand img { animation: none !important; } }

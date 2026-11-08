@@ -1,6 +1,7 @@
 // Page titles, descriptions, share images and structured data. Plain JavaScript on purpose:
 // it runs in the browser (for tabs and Google's renderer) and on the server (api/page.js), so link previews
 // from WhatsApp, Facebook and others, which do not run scripts, show the right product.
+import { FAQS } from './faq-data.js';
 
 export const PRIVATE_PAGES = ['cart', 'checkout', 'account', 'login', 'register', 'forgot', 'reset', 'order', 'invoice', 'admin', 'labels'];
 const KNOWN = ['', 'shop', 'product', 'gifts', 'gift-cards', 'finder', 'about', 'contact', 'faq', 'shipping', 'care', 'privacy', 'terms', 'track', ...PRIVATE_PAGES];
@@ -30,6 +31,14 @@ export function startingPrice(p) {
   const list = Number(p.base || 0) + (p.groups || []).reduce((a, g) => a + Number((g.options && g.options[0] && g.options[0].add) || 0), 0);
   return Math.round(list * (1 - Number(p.salePct || 0) / 100));
 }
+/** A trail of links Google can show under the page title: Home > Shop > Jar Candles > Hexagon Jar. */
+function breadcrumbs(origin, trail) {
+  return {
+    '@context': 'https://schema.org', '@type': 'BreadcrumbList',
+    itemListElement: trail.map(([name, path], i) => ({ '@type': 'ListItem', position: i + 1, name, item: origin + path })),
+  };
+}
+const approvedFor = (data, pid) => ((data && data.reviews) || []).filter((r) => String(r.pid) === String(pid) && Number(r.stars) >= 1 && Number(r.stars) <= 5);
 const inStock = (p) => p.stock === null || p.stock === undefined || p.stock > 0;
 
 /**
@@ -56,19 +65,45 @@ export function metaFor({ path, query = {}, origin, data }) {
     meta.description = clip((p.blurb || '') + ' Hand-poured soy wax, from ' + rs(startingPrice(p)) + '. Choose your colour' + (p.groups && p.groups.length ? ' and options' : '') + '.', 200);
     meta.image = /^(https?:|data:)/.test(img) ? img : origin + img;
     meta.type = 'product';
-    meta.jsonld.push({
+    const price = startingPrice(p);
+    const st2 = st || {};
+    const freeOver = Number(st2.freeOver || 0), stdRate = Number(st2.standard || 0);
+    const offer = {
+      '@type': 'Offer', url: meta.canonical, priceCurrency: 'LKR', price: String(price),
+      availability: inStock(p) ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock', itemCondition: 'https://schema.org/NewCondition',
+      seller: { '@type': 'Organization', name: shop },
+      // handling is the pouring time; delivery is the courier time (see the Shipping and Returns page)
+      shippingDetails: {
+        '@type': 'OfferShippingDetails',
+        shippingRate: { '@type': 'MonetaryAmount', value: String(freeOver && price >= freeOver ? 0 : stdRate), currency: 'LKR' },
+        shippingDestination: { '@type': 'DefinedRegion', addressCountry: 'LK' },
+        deliveryTime: { '@type': 'ShippingDeliveryTime', handlingTime: { '@type': 'QuantitativeValue', minValue: 2, maxValue: 4, unitCode: 'DAY' }, transitTime: { '@type': 'QuantitativeValue', minValue: 3, maxValue: 5, unitCode: 'DAY' } },
+      },
+      // made to order: no change-of-mind returns; damaged items are replaced or refunded (see the page linked below)
+      hasMerchantReturnPolicy: { '@type': 'MerchantReturnPolicy', applicableCountry: 'LK', returnPolicyCategory: 'https://schema.org/MerchantReturnNotPermitted', merchantReturnLink: origin + '/shipping' },
+    };
+    const product = {
       '@context': 'https://schema.org', '@type': 'Product', name: p.name, description: clip(p.desc || p.blurb, 400), sku: String(p.id),
       image: (p.images && p.images.length ? p.images : [meta.image]).map((u) => (/^(https?:|data:)/.test(u) ? u : origin + u)),
-      brand: { '@type': 'Brand', name: shop }, category: cat,
-      offers: { '@type': 'Offer', url: meta.canonical, priceCurrency: 'LKR', price: String(startingPrice(p)), availability: inStock(p) ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock', itemCondition: 'https://schema.org/NewCondition' },
-    });
+      brand: { '@type': 'Brand', name: shop }, category: cat, offers: offer,
+    };
+    const rv = approvedFor(data, p.id);
+    if (rv.length) {
+      product.aggregateRating = { '@type': 'AggregateRating', ratingValue: (rv.reduce((a, r) => a + Number(r.stars), 0) / rv.length).toFixed(1), reviewCount: String(rv.length), bestRating: '5', worstRating: '1' };
+      product.review = rv.slice(0, 5).map((r) => ({
+        '@type': 'Review', author: { '@type': 'Person', name: String(r.who || 'Customer').split(',')[0] }, datePublished: r.date,
+        reviewRating: { '@type': 'Rating', ratingValue: String(r.stars), bestRating: '5', worstRating: '1' }, reviewBody: clip(r.q, 300),
+      }));
+    }
+    meta.jsonld.push(product);
+    meta.jsonld.push(breadcrumbs(origin, [['Home', '/'], ['Shop', '/shop'], ...(cat ? [[cat, '/shop?cat=' + p.cat]] : []), [p.name, '/product/' + p.id]]));
     return meta;
   }
 
   if (name === 'shop') {
     meta.title = fill(STATIC_META.shop[0]); meta.description = fill(STATIC_META.shop[1]);
     const cat = query.cat && data && (data.categories || []).find((c) => c.id === query.cat);
-    if (cat) { meta.title = cat.name + ' | ' + shop; meta.description = clip(cat.blurb || meta.description); meta.canonical = origin + '/shop?cat=' + cat.id; if (cat.image) meta.image = /^(https?:|data:)/.test(cat.image) ? cat.image : origin + cat.image; }
+    if (cat) { meta.jsonld.push(breadcrumbs(origin, [['Home', '/'], ['Shop', '/shop'], [cat.name, '/shop?cat=' + cat.id]])); meta.title = cat.name + ' | ' + shop; meta.description = clip(cat.blurb || meta.description); meta.canonical = origin + '/shop?cat=' + cat.id; if (cat.image) meta.image = /^(https?:|data:)/.test(cat.image) ? cat.image : origin + cat.image; }
     else if (query.seasonal === '1') { meta.title = 'Seasonal candles | ' + shop; meta.canonical = origin + '/shop?seasonal=1'; }
     else if (query.season) { const s = data && (data.seasons || []).find((x) => x.id === query.season); if (s) { meta.title = s.name + ' | ' + shop; meta.description = clip(s.blurb || meta.description); meta.canonical = origin + '/shop?season=' + s.id; } }
     else if (query.shelf) { meta.canonical = origin + '/shop?shelf=' + encodeURIComponent(query.shelf); }
@@ -78,6 +113,12 @@ export function metaFor({ path, query = {}, origin, data }) {
 
   const row = STATIC_META[name] || STATIC_META[''];
   meta.title = fill(row[0]); meta.description = fill(row[1]);
+  if (name === 'faq') {
+    meta.jsonld.push({ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: FAQS.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })) });
+    meta.jsonld.push(breadcrumbs(origin, [['Home', '/'], ['FAQ', '/faq']]));
+  }
+  if (name === 'shipping') meta.jsonld.push(breadcrumbs(origin, [['Home', '/'], ['Shipping and returns', '/shipping']]));
+  if (name === 'shop' && !query.cat && !query.q && !query.shelf && !query.season && query.seasonal !== '1') meta.jsonld.push(breadcrumbs(origin, [['Home', '/'], ['Shop', '/shop']]));
   if (name === '') {
     const sameAs = ['instagram', 'facebook', 'tiktok', 'youtube'].map((k) => st[k]).filter(Boolean);
     meta.jsonld.push({ '@context': 'https://schema.org', '@type': 'Organization', name: shop, url: origin, logo: origin + '/logo.png', ...(sameAs.length ? { sameAs } : {}), ...(st.email ? { email: st.email } : {}), areaServed: 'LK' });

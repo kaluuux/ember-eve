@@ -59,6 +59,13 @@ export function SettingsView({ flash }: { flash: Flash }) {
       <div className="stack" style={{ gap: 20, maxWidth: 860 }}>
         <ErrorText>{err}</ErrorText>
 
+        <Section title="Site notice" hint="Shows visitors a pop-up while the shop is still being built. They can close it, and it comes back on their next visit. Switch it off when you are ready to launch." onSave={() => save('notice')} saved={saved}>
+          <Toggle on={d.devNotice} onChange={(v) => up({ devNotice: v })} title="Show the under-development notice" sub="Visitors see it once per visit, on any page of the shop. It never appears in the admin." />
+          <Label label="Message (leave empty for the standard wording)" wide>
+            <textarea className="input" rows={3} maxLength={400} placeholder="Ember & Eve is still under development. You are welcome to look around, but some things may not work yet and orders may not be taken. Thank you for your patience." value={d.devNoticeText} onChange={(e) => up({ devNoticeText: e.target.value })} />
+          </Label>
+        </Section>
+
         <Section title="Store details" onSave={() => save('store')} saved={saved}>
           <div className="fields two">
             <Label label="Shop name"><input className="input" value={d.shop} onChange={(e) => up({ shop: e.target.value })} /></Label>
