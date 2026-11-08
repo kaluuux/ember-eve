@@ -69,6 +69,8 @@ export const defaultSelection = (p: Product, palette: Color[]): Selection => nor
 
 const optionTotal = (p: Product, opts: Record<string, string>) =>
   p.groups.reduce((a, g) => a + (g.options.find((o) => o.id === opts[g.id])?.add ?? 0), 0);
+/** A sale percentage for display: whole numbers stay whole, others show one decimal (a price-based sale can give 14.3). */
+export const pctText = (n: number) => (Number.isInteger(n) ? String(n) : (Math.round(n * 10) / 10).toFixed(1));
 const afterSale = (p: Product, n: number) => Math.round(n * (1 - (p.salePct || 0) / 100));
 
 /** Price before any sale, without the custom-blend fee */

@@ -50,7 +50,7 @@ function NavDropdown({ label, active, children }: { label: string; active?: bool
 
 export function Layout({ children }: { children: ReactNode }) {
   const t = useT();
-  const { settings, categories, liveSeasons, seasonal, cart, wish, user, setCartOpen, toast, cookieAccepted, acceptCookie } = useApp();
+  const { settings, categories, liveSeasons, seasonal, products, cart, wish, user, setCartOpen, toast, cookieAccepted, acceptCookie } = useApp();
   const [hq, setHq] = useState('');
   const [scrolled, setScrolled] = useState(false);
   const [bump, setBump] = useState(false);
@@ -60,6 +60,9 @@ export function Layout({ children }: { children: ReactNode }) {
   const onShop = r.name === 'shop';
   const seasonalMode = onShop && r.q.seasonal === '1';
   const inCollection = onShop && (!!r.q.cat || seasonalMode);
+  /** The On Sale link shows while at least one switched-on candle has a sale */
+  const hasSale = products.some((p) => p.active && p.salePct > 0);
+  const onSalePage = onShop && r.q.shelf === 'sale';
   const here = (name: string) => (r.name === name ? { className: 'on', 'aria-current': 'page' as const } : {});
   const cartCount = cart.reduce((a, x) => a + x.qty, 0);
 
@@ -112,7 +115,8 @@ export function Layout({ children }: { children: ReactNode }) {
             <span>{t('Ember & Eve')}</span>
           </a>
           <nav className="nav" aria-label={t('Main')}>
-            <a href="/shop" {...((onShop && !inCollection && !r.q.season) || r.name === 'product' ? { className: 'on', 'aria-current': 'page' as const } : {})}>{t('Shop')}</a>
+            <a href="/shop" {...((onShop && !inCollection && !r.q.season && !onSalePage) || r.name === 'product' ? { className: 'on', 'aria-current': 'page' as const } : {})}>{t('Shop')}</a>
+            {hasSale && <a href="/shop?shelf=sale" className={'sale-link' + (onSalePage ? ' on' : '')} {...(onSalePage ? { 'aria-current': 'page' as const } : {})}>{t('On Sale')}</a>}
             <NavDropdown label={t('Our Collection')} active={inCollection}>
               {categories.map((c) => <a key={c.id} role="menuitem" href={'/shop?cat=' + c.id} {...(onShop && r.q.cat === c.id ? { className: 'on', 'aria-current': 'page' as const } : {})}>{c.name.replace(' Candles', '')}</a>)}
               {seasonal.length > 0 && <a role="menuitem" href="/shop?seasonal=1" {...(seasonalMode ? { className: 'on', 'aria-current': 'page' as const } : {})}>{t('Seasonal')}</a>}
@@ -132,7 +136,8 @@ export function Layout({ children }: { children: ReactNode }) {
                 <form onSubmit={(e) => { doSearch(e); setMenu(false); }} role="search">
                   <input className="search" name="mq" value={hq} onChange={(e) => setHq(e.target.value)} placeholder={t('Search candles')} aria-label={t('Search candles')} />
                 </form>
-                <a href="/shop" {...(onShop && !inCollection && !r.q.season ? { className: 'on' } : {})}>{t('Shop')}</a>
+                <a href="/shop" {...(onShop && !inCollection && !r.q.season && !onSalePage ? { className: 'on' } : {})}>{t('Shop')}</a>
+                {hasSale && <a href="/shop?shelf=sale" className="sale-link">{t('On Sale')}</a>}
                 <div className="mm-label">{t('Our Collection')}</div>
                 <div className="mm-sub">
                   {categories.map((c) => <a key={c.id} href={'/shop?cat=' + c.id}>{c.name}</a>)}
@@ -140,7 +145,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   {liveSeasons.map((x) => <a key={x.id} href={'/season/' + x.id} className="season-link">{x.name.replace(' Collection', '')}</a>)}
                 </div>
                 <a href="/gifts" {...here('gifts')}>{t('Gift Box')}</a>
-            <a href="/bulk" {...here('bulk')}>{t('Bulk Orders')}</a>
+                <a href="/bulk" {...here('bulk')}>{t('Bulk Orders')}</a>
                 {remote && settings.giftCardsOn && <a href="/gift-cards" {...here('gift-cards')}>{t('Gift Cards')}</a>}
                 <a href="/track" {...here('track')}>{t('Track Order')}</a>
                 <a href="/about" {...here('about')}>{t('About')}</a>

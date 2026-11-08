@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { EMPTY, get, money, set, useStored } from '../store';
 import { Chip, ErrorText } from '../components/ui';
-import { seasonLive } from '../commerce';
+import { pctText, seasonLive } from '../commerce';
 import { remote } from '../remote';
 import { PhotoManager } from './PhotoManager';
 import { publishStarter, saveCost } from '../sync';
@@ -157,7 +157,7 @@ export function ProductsView({ flash }: { flash: Flash }) {
                     <input className="input" type="number" min={0} style={{ width: 80 }} aria-label={'Cost price ' + p.name} defaultValue={costs[String(p.id)] ?? ''} key={'c' + costs[String(p.id)]} placeholder="Not set" onBlur={(e) => { const v = e.target.value.trim() === '' ? null : Math.max(0, Math.round(Number(e.target.value) || 0)); if (v !== (costs[String(p.id)] ?? null)) void saveCost(p.id, v).then((m) => m && flash(m)); }} />
                     {costs[String(p.id)] !== undefined && p.base > 0 && <div style={{ fontSize: 11, color: 'var(--muted2)', marginTop: 2 }}>{Math.round(((p.base * (1 - p.salePct / 100) - costs[String(p.id)]) / (p.base * (1 - p.salePct / 100))) * 100)}% margin</div>}
                   </td>
-                  <td><input className="input" type="number" min={0} max={90} style={{ width: 70 }} aria-label={'Sale percent ' + p.name} defaultValue={p.salePct || ''} key={'s' + p.salePct} placeholder="0" onBlur={(e) => { const v = Math.min(90, Math.max(0, Math.round(Number(e.target.value) || 0))); if (v !== p.salePct) patch(p.id, { salePct: v }); }} /></td>
+                  <td><input className="input" type="number" min={0} max={90} step="any" style={{ width: 70 }} aria-label={'Sale percent ' + p.name} title="Percent off. To set a sale price instead, open Edit." defaultValue={p.salePct ? pctText(p.salePct) : ''} key={'s' + p.salePct} placeholder="0" onBlur={(e) => { if (e.target.value === (p.salePct ? pctText(p.salePct) : '')) return; const v = Math.min(90, Math.max(0, Math.round(Number(e.target.value) || 0))); if (v !== p.salePct || p.salePrice) patch(p.id, { salePct: v, salePrice: undefined }); }} /></td>
                   <td><input className="input" type="number" min={0} style={{ width: 90 }} aria-label={'Stock ' + p.name} defaultValue={p.stock ?? ''} key={'k' + p.stock} placeholder="Made to order" onBlur={(e) => { const v = num(e.target.value); if (v !== p.stock) patch(p.id, { stock: v }); }} /></td>
                   <td>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
@@ -207,7 +207,12 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
   const costs = useStored<Costs>('costs', NO_COSTS);
   const [cost, setCost] = useState(() => (costs[String(product.id)] !== undefined ? String(costs[String(product.id)]) : ''));
   const [err, setErr] = useState('');
-  const up = (o: Partial<Product>) => setD((t) => ({ ...t, ...o }));
+  // a sale entered as a price is turned into the matching percentage, and kept in step when the base price or options change
+  const startOf = (t: Product) => t.base + t.groups.reduce((a, g) => a + (g.options[0]?.add ?? 0), 0);
+  const pctFromPrice = (t: Product) => { const s = startOf(t); return !t.salePrice || s <= 0 || t.salePrice >= s ? 0 : Math.min(90, Math.round((1 - t.salePrice / s) * 1e4) / 1e2); };
+  const up = (o: Partial<Product>) => setD((t) => { const n = { ...t, ...o }; return n.salePrice ? { ...n, salePct: pctFromPrice(n) } : n; });
+  const [saleMode, setSaleMode] = useState<'pct' | 'price'>(product.salePrice ? 'price' : 'pct');
+  const start = startOf(d);
   const setGroup = (gi: number, o: Partial<Group>) => up({ groups: d.groups.map((g, i) => (i === gi ? { ...g, ...o } : g)) });
   const setOpt = (gi: number, oi: number, o: Partial<Opt>) => setGroup(gi, { options: d.groups[gi].options.map((x, i) => (i === oi ? { ...x, ...o } : x)) });
   const field = { display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, fontWeight: 600, color: 'var(--muted2)' } as const;
@@ -220,7 +225,7 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
       if (!g.label.trim() || !g.options.length) return setErr('Every option group needs a name and at least one choice.');
       if (g.options.some((o) => !o.label.trim())) return setErr('Every choice needs a label.');
     }
-    const clean: Product = { ...d, id: d.id || Date.now(), name: d.name.trim(), base: Math.round(d.base), custom: d.colors && d.custom };
+    const clean: Product = { ...d, id: d.id || Date.now(), name: d.name.trim(), base: Math.round(d.base), custom: d.colors && d.custom, salePrice: d.salePrice && d.salePrice < start ? d.salePrice : undefined };
     const all = get<Product[]>('products', []);
     set('products', d.id ? all.map((x) => (x.id === d.id ? clean : x)) : all.concat(clean));
     const cv = cost.trim() === '' ? null : Math.max(0, Math.round(Number(cost) || 0));
@@ -249,7 +254,19 @@ function ProductEditor({ product, onClose, onSaved }: { product: Product; onClos
           <label style={{ ...field, gridColumn: 'span 2' }}>Full description<textarea className="input" rows={3} value={d.desc} onChange={(e) => up({ desc: e.target.value })} /></label>
           <label style={field}>Base price (Rs)<input className="input" type="number" min={0} value={d.base || ''} onChange={(e) => up({ base: Number(e.target.value) })} /></label>
           <label style={field}>Cost to make (Rs, private)<input className="input" type="number" min={0} value={cost} placeholder="Not set" onChange={(e) => setCost(e.target.value)} /></label>
-          <label style={field}>Sale % (0 = none)<input className="input" type="number" min={0} max={90} value={d.salePct || ''} onChange={(e) => up({ salePct: Math.min(90, Math.max(0, Number(e.target.value) || 0)) })} /></label>
+          <div style={field}>
+            <span>Sale (leave empty for none)</span>
+            <div className="seg" role="group" aria-label="Enter the sale as" style={{ alignSelf: 'flex-start' }}>
+              <button type="button" className={saleMode === 'pct' ? 'on' : ''} aria-pressed={saleMode === 'pct'} onClick={() => { setSaleMode('pct'); up({ salePrice: undefined }); }}>% off</button>
+              <button type="button" className={saleMode === 'price' ? 'on' : ''} aria-pressed={saleMode === 'price'} onClick={() => { setSaleMode('price'); const now = Math.round(start * (1 - d.salePct / 100)); up({ salePrice: d.salePct > 0 && now > 0 ? now : undefined }); }}>Sale price</button>
+            </div>
+            {saleMode === 'pct'
+              ? <input className="input" type="number" min={0} max={90} step="any" aria-label="Sale percent" placeholder="e.g. 15" value={d.salePct || ''} onChange={(e) => up({ salePct: Math.min(90, Math.max(0, Number(e.target.value) || 0)) })} />
+              : <input className="input" type="number" min={0} aria-label="Sale price in rupees" placeholder={'e.g. ' + Math.round(start * 0.85)} value={d.salePrice || ''} onChange={(e) => up({ salePrice: e.target.value === '' ? undefined : Math.max(0, Math.round(Number(e.target.value) || 0)) })} />}
+            <span style={{ fontWeight: 400, fontSize: 12 }}>
+              {saleMode === 'price' && d.salePrice && d.salePrice >= start ? 'The sale price must be lower than ' + money(start) + '.' : d.salePct > 0 ? (saleMode === 'price' ? money(d.salePrice ?? 0) + ' instead of ' + money(start) + ' (' + pctText(d.salePct) + '% off)' : money(Math.round(start * (1 - d.salePct / 100))) + ' instead of ' + money(start)) : 'No sale. Usual price ' + money(start) + '.'}
+            </span>
+          </div>
           <label style={field}>Stock (empty = made to order)<input className="input" type="number" min={0} value={d.stock ?? ''} onChange={(e) => up({ stock: e.target.value === '' ? null : Math.max(0, Math.floor(Number(e.target.value))) })} /></label>
           <label style={field}>Season
             <select className="input" value={d.season} onChange={(e) => up({ season: e.target.value })}>

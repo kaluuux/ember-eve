@@ -10,7 +10,7 @@ import { remote } from '../remote';
 import { reviewPhotoUrl } from '../sync';
 import { NotifyMe } from '../components/Perks';
 import { useT } from '../i18n';
-import { blendValid, defaultSelection, fromListPrice, inStock, listPrice, normalize, ratingOf, selectionTint, unitPrice, type Selection } from '../commerce';
+import { blendValid, defaultSelection, fromListPrice, inStock, listPrice, normalize, ratingOf, selectionTint, unitPrice, type Selection, pctText } from '../commerce';
 import type { Route } from '../router';
 import type { Review } from '../types';
 
@@ -107,7 +107,7 @@ export function Product({ route }: { route: Route }) {
             </div>
             <div style={{ fontSize: 22, fontWeight: 700 }}>
               {money(unit)}
-              {pp.salePct > 0 && <><s style={{ marginLeft: 10, fontSize: 16, fontWeight: 400, color: 'var(--muted2)' }}>{money(listPrice(pp, sel))}</s><span className="tagpill sale" style={{ marginLeft: 8 }}>-{pp.salePct}%</span></>}
+              {pp.salePct > 0 && <><s style={{ marginLeft: 10, fontSize: 16, fontWeight: 400, color: 'var(--muted2)' }}>{money(listPrice(pp, sel))}</s><span className="tagpill sale" style={{ marginLeft: 8 }}>-{pctText(pp.salePct)}%</span></>}
             </div>
             <div style={{ fontSize: 16, lineHeight: '24px', color: 'var(--text2)' }}>{pp.blurb}</div>
             <Configurator p={pp} sel={sel} onChange={setPick} />
