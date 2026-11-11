@@ -10,7 +10,7 @@ import { remote } from '../remote';
 import { reviewPhotoUrl } from '../sync';
 import { NotifyMe } from '../components/Perks';
 import { useT } from '../i18n';
-import { blendValid, defaultSelection, fromListPrice, inStock, listPrice, normalize, ratingOf, selectionTint, unitPrice, type Selection, pctText } from '../commerce';
+import { MAX_QTY, blendValid, defaultSelection, fromListPrice, inStock, listPrice, normalize, ratingOf, selectionTint, unitPrice, type Selection, pctText } from '../commerce';
 import type { Route } from '../router';
 import type { Review } from '../types';
 
@@ -58,7 +58,7 @@ export function Product({ route }: { route: Route }) {
 
   const sel = normalize(pp, pick ?? {}, colors);
   const inBasket = cart.filter((x) => x.pid === pp.id).reduce((a, x) => a + x.qty, 0);
-  const available = pp.stock === null ? 10 : pp.stock - inBasket;
+  const available = pp.stock === null ? MAX_QTY - inBasket : pp.stock - inBasket;
   const rt = ratingOf(reviews, pp.id);
   const mine = reviews.filter((r) => r.pid === pp.id);
   const saved = wish.includes(pp.id);
@@ -114,7 +114,7 @@ export function Product({ route }: { route: Route }) {
             <div style={{ fontSize: 14, fontWeight: 500, color: !sold && (pp.stock === null || pp.stock > 5) ? 'var(--green)' : 'var(--amber)' }}>{stockText}</div>
             {sold && <NotifyMe pid={pp.id} name={pp.name} />}
             <div ref={ctaRef} style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Stepper qty={sel.qty} onDec={() => setPick({ ...sel, qty: Math.max(1, sel.qty - 1) })} onInc={() => setPick({ ...sel, qty: Math.min(Math.max(1, available), sel.qty + 1) })} />
+              <Stepper qty={sel.qty} onDec={() => setPick({ ...sel, qty: Math.max(1, sel.qty - 1) })} onInc={() => setPick({ ...sel, qty: Math.min(Math.max(1, available), sel.qty + 1) })} onSet={(n) => setPick({ ...sel, qty: Math.min(Math.max(1, available), n) })} max={Math.max(1, available)} />
               <button type="button" className={'btn' + (sold || !blendValid(sel) ? ' disabled' : '')} onClick={() => addCandle(pp.id, sel)} style={{ flex: 1, minWidth: 160 }}>
                 {sold ? t('Sold Out') : t('Add to Basket')}
               </button>

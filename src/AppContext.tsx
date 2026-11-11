@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState, type
 import { tr } from './i18n';
 import type { CartLine, Category, Color, Discount, Order, Product, Review, Season, Session, Settings, User } from './types';
 import { DEFAULT_SETTINGS, EMPTY, get, set, useStored, withDefaults } from './store';
-import { computeTotals, describe, normalize, selectionTint, salesFromOrders, shelfProducts, unitPrice, visibleProducts, blendValid, type Selection, type Shelf, type Totals } from './commerce';
+import { MAX_QTY, computeTotals, describe, normalize, selectionTint, salesFromOrders, shelfProducts, unitPrice, visibleProducts, blendValid, type Selection, type Shelf, type Totals } from './commerce';
 import { go } from './router';
 import { remote } from './remote';
 import { checkDiscount, customerSignOut } from './sync';
@@ -43,6 +43,8 @@ interface Ctx {
   /** Put an earlier order's candles back in the basket. Returns how many lines were added. */
   reorder: (o: Order) => number;
   setQty: (key: string, delta: number) => void;
+  /** Set a line's quantity directly (typed into the quantity box) */
+  setQtyTo: (key: string, qty: number) => void;
   clearCart: () => void;
   toggleWish: (id: number) => void;
   signIn: (u: User | Session) => void;
@@ -103,7 +105,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addLine = useCallback((line: CartLine) => {
     const c = get<CartLine[]>('cart', []).slice();
     const i = c.findIndex((x) => x.key === line.key);
-    if (i >= 0) c[i] = { ...c[i], qty: Math.min(10, c[i].qty + line.qty) };
+    if (i >= 0) c[i] = { ...c[i], qty: Math.min(MAX_QTY, c[i].qty + line.qty) };
     else c.push(line);
     set('cart', c);
   }, []);
@@ -119,7 +121,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const cur = get<CartLine[]>('cart', []).slice();
     const i = cur.findIndex((x) => x.key === key);
     const have = cur.filter((x) => x.pid === pid).reduce((a, x) => a + x.qty, 0);
-    const room = p.stock === null ? 10 : p.stock - have;
+    const room = p.stock === null ? MAX_QTY - have : p.stock - have;
     const n = Math.min(sel.qty, room);
     if (n <= 0) { flash(p.stock === 0 ? 'Sold out' : tr('Only {n} in stock', { n: p.stock ?? 0 })); return false; }
     if (i >= 0) cur[i] = { ...cur[i], qty: cur[i].qty + n };
@@ -129,20 +131,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return true;
   }, [flash]);
 
-  const setQty: Ctx['setQty'] = useCallback((key, d) => {
+  /** Change a line to `next(currentQty)`; 0 or less removes it. Stock (when set) is the only real limit. */
+  const changeQty = useCallback((key: string, next: (q: number) => number) => {
     const cur = get<CartLine[]>('cart', []).slice();
     const i = cur.findIndex((x) => x.key === key);
     if (i < 0) return;
     const l = cur[i];
-    if (l.kind === 'giftcard' && d > 0) { flash('Add another gift card for each one you want to send.'); return; }
+    let q = Math.floor(next(l.qty));
+    if (l.kind === 'giftcard' && q > 1) { flash('Add another gift card for each one you want to send.'); return; }
     const others = cur.filter((x, j) => j !== i && x.pid === l.pid).reduce((a, x) => a + x.qty, 0);
     const stock = l.pid ? get<Product[]>('products', []).find((p) => p.id === l.pid)?.stock : null;
-    const max = l.pid && stock !== null && stock !== undefined ? stock - others : 10;
-    let q = l.qty + d;
+    const max = l.pid && stock !== null && stock !== undefined ? stock - others : MAX_QTY;
     if (q > max) { flash(tr('Only {n} available', { n: max })); q = max; }
     if (q <= 0) cur.splice(i, 1); else cur[i] = { ...l, qty: q };
     set('cart', cur);
   }, [flash]);
+  const setQty: Ctx['setQty'] = useCallback((key, d) => changeQty(key, (q) => q + d), [changeQty]);
+  const setQtyTo: Ctx['setQtyTo'] = useCallback((key, n) => changeQty(key, () => Math.max(1, n)), [changeQty]);
 
   const clearCart = useCallback(() => { set('cart', []); setDisc(''); }, [setDisc]);
 
@@ -175,7 +180,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const value: Ctx = {
     products, active, colors, categories, seasons, liveSeasons, seasonal, shelf, settings, reviews, cart, wish, user, disc, setDisc, applyCode, discObj, totals, toast, flash, cartOpen, setCartOpen,
-    qv, setQv, addCandle, addLine, reorder, setQty, clearCart, toggleWish, signIn, signOut, cookieAccepted, acceptCookie,
+    qv, setQv, addCandle, addLine, reorder, setQty, setQtyTo, clearCart, toggleWish, signIn, signOut, cookieAccepted, acceptCookie,
   };
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

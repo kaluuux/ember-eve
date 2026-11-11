@@ -1,11 +1,13 @@
 import { useApp } from '../AppContext';
-import { freeMessage, lineText, soft } from '../commerce';
+import { LineDetail, boxPhoto } from './LineDetail';
+import { freeMessage, soft } from '../commerce';
 import { money } from '../store';
+import { QtyInput } from './ui';
 import { useT } from '../i18n';
 
 export function CartDrawer() {
   const t = useT();
-  const { cartOpen, setCartOpen, cart, setQty, totals } = useApp();
+  const { cartOpen, setCartOpen, cart, setQty, setQtyTo, totals, products } = useApp();
   if (!cartOpen) return null;
   const close = () => setCartOpen(false);
   return (
@@ -26,14 +28,15 @@ export function CartDrawer() {
           )}
           {cart.map((l) => (
             <div key={l.key} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <div style={{ width: 60, height: 60, borderRadius: 14, background: soft(l.tint), ...(l.img ? { backgroundImage: 'url(' + l.img + ')', backgroundSize: 'cover', backgroundPosition: 'center' } : {}), flex: 'none', border: '1px solid var(--line)' }} />
+              <div style={{ width: 60, height: 60, borderRadius: 14, background: soft(l.tint), ...((l.img || boxPhoto(l, products)) ? { backgroundImage: 'url(' + (l.img || boxPhoto(l, products)) + ')', backgroundSize: 'cover', backgroundPosition: 'center' } : {}), flex: 'none', border: '1px solid var(--line)', alignSelf: 'flex-start' }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 16, fontWeight: 500 }}>{l.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--muted2)' }}>{lineText(l)} · {money(l.unit * l.qty)}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted2)' }}><LineDetail line={l} compact /></div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>{money(l.unit * l.qty)}</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <button type="button" onClick={() => setQty(l.key, -1)} aria-label={t('Decrease quantity')} style={qtyBtn}>-</button>
-                <span style={{ fontSize: 14, minWidth: 16, textAlign: 'center' }}>{l.qty}</span>
+                <QtyInput qty={l.qty} onSet={(n) => setQtyTo(l.key, n)} className="sm" />
                 <button type="button" onClick={() => setQty(l.key, 1)} aria-label={t('Increase quantity')} style={qtyBtn}>+</button>
               </div>
             </div>

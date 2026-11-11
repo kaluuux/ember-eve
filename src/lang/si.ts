@@ -623,4 +623,8 @@ export const SI: Record<string, string> = {
   "Have questions about our policies?": "අපගේ ප්‍රතිපත්ති ගැන ප්‍රශ්න තිබේද?",
   "Our team is happy to assist with any data inquiries, custom orders, or candle care questions.": "දත්ත පිළිබඳ විමසීම්, අභිරුචි ඇණවුම් හෝ ඉටිපන්දම් රැකවරණය පිළිබඳ ඕනෑම ප්‍රශ්නයකට අපගේ කණ්ඩායම සතුටින් උදව් කරනු ඇත.",
   "Contact Customer Care": "පාරිභෝගික සේවාව අමතන්න",
+  "Quantity": "ප්‍රමාණය",
+  "Qty": "ප්‍රමාණය",
+  "Gift note": "තෑගි සටහන",
+  "Sticker": "ස්ටිකරය",
 };

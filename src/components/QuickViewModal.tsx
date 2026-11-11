@@ -1,7 +1,7 @@
 import { useApp } from '../AppContext';
 import { Stepper } from './ui';
 import { Configurator } from './Configurator';
-import { blendValid, normalize, selectionTint, unitPrice } from '../commerce';
+import { MAX_QTY, blendValid, normalize, selectionTint, unitPrice } from '../commerce';
 import { money } from '../store';
 import { useT } from '../i18n';
 
@@ -13,7 +13,7 @@ export function QuickViewModal() {
   const sel = normalize(p, qv.sel, colors);
   const set = (s: typeof sel) => setQv({ id: qv.id, sel: s });
   const close = () => setQv(null);
-  const max = p.stock === null ? 10 : Math.max(1, p.stock);
+  const max = p.stock === null ? MAX_QTY : Math.max(1, p.stock);
   const unit = unitPrice(p, sel, settings);
 
   return (
@@ -30,7 +30,7 @@ export function QuickViewModal() {
             <div style={{ fontSize: 14, lineHeight: '22px', color: 'var(--text2)' }}>{p.blurb}</div>
             <Configurator p={p} sel={sel} onChange={set} size="sm" />
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <Stepper small qty={sel.qty} onDec={() => set({ ...sel, qty: Math.max(1, sel.qty - 1) })} onInc={() => set({ ...sel, qty: Math.min(max, sel.qty + 1) })} />
+              <Stepper small qty={sel.qty} onDec={() => set({ ...sel, qty: Math.max(1, sel.qty - 1) })} onInc={() => set({ ...sel, qty: Math.min(max, sel.qty + 1) })} onSet={(n) => set({ ...sel, qty: Math.min(max, n) })} max={max} />
               <div style={{ fontSize: 22, fontWeight: 700 }}>{money(unit * sel.qty)}</div>
             </div>
             <button type="button" className={'btn' + (blendValid(sel) ? '' : ' disabled')} onClick={() => { if (addCandle(qv.id, sel)) close(); }}>{t('Add to Basket')}</button>

@@ -623,4 +623,8 @@ export const TA: Record<string, string> = {
   "Have questions about our policies?": "எங்கள் கொள்கைகள் பற்றி கேள்விகள் உள்ளதா?",
   "Our team is happy to assist with any data inquiries, custom orders, or candle care questions.": "தரவு விசாரணைகள், தனிப்பயன் ஆர்டர்கள் அல்லது மெழுகுவர்த்திப் பராமரிப்பு பற்றிய எந்தக் கேள்விக்கும் எங்கள் குழு மகிழ்ச்சியுடன் உதவும்.",
   "Contact Customer Care": "வாடிக்கையாளர் சேவையைத் தொடர்புகொள்ளுங்கள்",
+  "Quantity": "அளவு",
+  "Qty": "அளவு",
+  "Gift note": "பரிசுக் குறிப்பு",
+  "Sticker": "ஸ்டிக்கர்",
 };
