@@ -91,6 +91,9 @@ export function describe(p: Product, sel: Selection, palette: Color[]): string {
   return parts.join(' · ');
 }
 
+/** Safety ceiling per basket line, so a typo cannot create an absurd order. Stock, when set, limits it further. */
+export const MAX_QTY = 9999;
+
 /** Pure white reads as an empty box on the page, so show it as warm cream. */
 export const soft = (hex: string) => (hex.toUpperCase() === '#FFFFFF' ? '#F3EADF' : hex);
 

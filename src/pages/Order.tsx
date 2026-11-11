@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
+import { LineDetail } from '../components/LineDetail';
 import { useApp } from '../AppContext';
-import { lineText, orderView, soft } from '../commerce';
+import { orderView, soft } from '../commerce';
 import { get, money, useStored, EMPTY } from '../store';
 import { remote } from '../remote';
 import { uploadReceipt } from '../sync';
@@ -78,7 +79,8 @@ export function Order({ route }: { route: Route }) {
               <div style={{ width: 48, height: 48, borderRadius: 8, background: soft(l.tint), flex: 'none' }} />
               <div style={{ flex: 1, fontSize: 14 }}>
                 <div style={{ fontWeight: 500 }}>{l.name}</div>
-                <div className="muted">{lineText(l)} · Qty {l.qty}</div>
+                <LineDetail line={l} />
+                <div className="muted">{t('Qty')}{' '}{l.qty}</div>
               </div>
               <div style={{ fontSize: 14, fontWeight: 600 }}>{money(l.unit * l.qty)}</div>
             </div>

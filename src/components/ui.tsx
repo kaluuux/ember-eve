@@ -1,5 +1,6 @@
-import { useCallback, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react';
 import { tr } from '../i18n';
+import { MAX_QTY } from '../commerce';
 
 export type FormValues = Record<string, string | number | undefined>;
 
@@ -65,12 +66,41 @@ export function ErrorText({ children }: { children?: ReactNode }) {
   return children ? <div className="err" role="alert">{typeof children === 'string' ? tr(children) : children}</div> : null;
 }
 
-export function Stepper({ qty, onDec, onInc, small }: { qty: number; onDec: () => void; onInc: () => void; small?: boolean }) {
+/**
+ * A quantity people can type into (handy for 50 candles), not just step with - and +.
+ * The new number is applied when they press Enter or leave the box; anything that is not a whole number above 0 puts the old value back.
+ */
+export function QtyInput({ qty, onSet, max = MAX_QTY, className, style }: { qty: number; onSet: (n: number) => void; max?: number; className?: string; style?: CSSProperties }) {
+  const [text, setText] = useState(String(qty));
+  useEffect(() => { setText(String(qty)); }, [qty]);
+  const commit = () => {
+    const n = parseInt(text, 10);
+    if (!(n >= 1)) { setText(String(qty)); return; }
+    const v = Math.min(max, n);
+    setText(String(v));
+    if (v !== qty) onSet(v);
+  };
+  return (
+    <input
+      className={'qty-input' + (className ? ' ' + className : '')}
+      type="text" inputMode="numeric" pattern="[0-9]*" autoComplete="off"
+      aria-label={tr('Quantity')}
+      value={text}
+      onChange={(e) => setText(e.target.value.replace(/\D/g, '').slice(0, String(MAX_QTY).length))}
+      onFocus={(e) => e.target.select()}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') { setText(String(qty)); (e.target as HTMLInputElement).blur(); } }}
+      style={{ width: Math.max(2, text.length) + 1.6 + 'ch', ...style }}
+    />
+  );
+}
+
+export function Stepper({ qty, onDec, onInc, onSet, max, small }: { qty: number; onDec: () => void; onInc: () => void; onSet?: (n: number) => void; max?: number; small?: boolean }) {
   return (
     <div className={'stepper' + (small ? ' sm' : '')}>
-      <button type="button" onClick={onDec} aria-label="Decrease quantity">-</button>
-      <span>{qty}</span>
-      <button type="button" onClick={onInc} aria-label="Increase quantity">+</button>
+      <button type="button" onClick={onDec} aria-label={tr('Decrease quantity')}>-</button>
+      {onSet ? <QtyInput qty={qty} onSet={onSet} max={max} /> : <span>{qty}</span>}
+      <button type="button" onClick={onInc} aria-label={tr('Increase quantity')}>+</button>
     </div>
   );
 }

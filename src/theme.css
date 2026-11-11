@@ -464,3 +464,34 @@ html[lang='si'] .header .dd-btn, html[lang='ta'] .header .dd-btn { font-size: 13
 /* On Sale nav link */
 .header .nav a.sale-link, .header .mmenu a.sale-link { color: #C62828; font-weight: 600; }
 .header .nav a.sale-link.on { color: #C62828; }
+
+/* ---------------------------------------------------------------- typeable quantity */
+.qty-input { border: 0; background: transparent; text-align: center; font: 600 15px/1 Inter, sans-serif; color: var(--ink); padding: 6px 2px; min-width: 2.6ch; height: auto; margin: 0; -moz-appearance: textfield; }
+.qty-input:focus { outline: 2px solid var(--brown); outline-offset: -2px; border-radius: 6px; background: #fff; }
+.qty-input.sm { font-size: 14px; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.stepper .qty-input { align-self: center; }
+
+/* ---------------------------------------------------------------- gift box contents, one candle per row */
+.ld-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ld-item { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--cream, #FBF6EF); }
+.ld-thumb { flex: none; width: 40px; height: 40px; border-radius: 10px; background-size: cover; background-position: center; border: 1px solid var(--line); }
+.ld-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.ld-name { font-size: 14px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 6px; line-height: 1.3; }
+.ld-n { flex: none; width: 18px; height: 18px; border-radius: 50%; background: var(--brown); color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.ld-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.ld-tag { font-size: 12px; line-height: 1.3; padding: 3px 8px; border-radius: 999px; background: #fff; border: 1px solid var(--line); color: var(--text2, #555); }
+.ld-tag i { font-style: normal; color: var(--muted2, #8C7B6E); margin-right: 4px; }
+.ld-sticker { font-size: 12px; color: var(--brown-d, #6E4E33); font-style: italic; overflow-wrap: anywhere; }
+.ld-note { margin-top: 8px; font-size: 13px; padding: 8px 10px; border-radius: 10px; background: #fff; border: 1px dashed var(--sand, #DCCFBF); color: var(--text2, #555); overflow-wrap: anywhere; }
+.ld-note b { margin-right: 6px; color: var(--ink); font-weight: 600; }
+.ld-compact .ld-item { padding: 6px 8px; gap: 8px; }
+.ld-compact .ld-thumb { width: 30px; height: 30px; border-radius: 8px; }
+.ld-compact .ld-name { font-size: 13px; }
+.ld-compact .ld-tag { font-size: 11px; padding: 2px 6px; }
+/* the admin has its own colours */
+.admin-shell .ld-item { background: #FBF8F4; }
+
+/* gift box builder: the chosen candle's own photo */
+.gift-slot-art.has-img { aspect-ratio: 3 / 2; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); }
+.gift-slot-art.has-img img { width: 100%; height: 100%; object-fit: cover; display: block; animation: fadeIn 0.35s ease both; }
+@media (max-width: 720px) { .gift-slot-art.has-img { aspect-ratio: 16 / 10 !important; } }

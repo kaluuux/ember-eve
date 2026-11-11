@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { LineDetail } from '../components/LineDetail';
 import { EMPTY, fmtDate, get, money, set, useStored, withDefaults, DEFAULT_SETTINGS } from '../store';
 import { go } from '../router';
 import { remote } from '../remote';
@@ -292,7 +293,7 @@ function OrderDetail({ o, settings, flash }: { o: Order; settings: Settings; fla
         <h4>Items</h4>
         {o.items.map((l, i) => (
           <div key={i} className="row-between" style={{ alignItems: 'flex-start', gap: 12, padding: '6px 0' }}>
-            <span>{l.qty} × {l.name}<br /><span className="muted" style={{ fontSize: 12 }}>{lineText(l)}</span></span>
+            <span style={{ minWidth: 0, flex: 1 }}>{l.qty} × {l.name}<div style={{ fontSize: 12, marginTop: 4 }}><LineDetail line={l} compact /></div></span>
             {!staff && <span style={{ whiteSpace: 'nowrap' }}>{money(l.unit * l.qty)}</span>}
           </div>
         ))}

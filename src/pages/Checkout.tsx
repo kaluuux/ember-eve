@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import { LineDetail, boxPhoto } from '../components/LineDetail';
 import { useApp } from '../AppContext';
 import { DiscountBox } from '../components/DiscountBox';
 import { BankAccounts } from '../components/BankAccounts';
 import { CheckoutGate } from '../components/CheckoutGate';
 import { Summary } from './Cart';
 import { ErrorText, Field, useForm } from '../components/ui';
-import { computeTotals, lineText, type Totals, soft } from '../commerce';
+import { computeTotals, type Totals, soft } from '../commerce';
 import { EMPTY, SL_DISTRICTS, addressBook, get, isEmail, money, set, setLocal, useStored } from '../store';
 import { remote } from '../remote';
 import { checkGiftCard, orderErrorText, placeOrder, quoteOrder, saveProfile, type Wallet } from '../sync';
@@ -26,7 +27,7 @@ const PAY_INFO: Record<PayMethod, { title: string; sub: string }> = {
 
 export function Checkout() {
   const t = useT();
-  const { cart, user, disc, discObj, settings: st, clearCart, flash } = useApp();
+  const { cart, user, disc, discObj, settings: st, clearCart, flash, products: catalog } = useApp();
   const users = useStored<User[]>('users', EMPTY);
   const me = useMemo(() => (user ? users.find((u) => u.id === user.id) : undefined), [user, users]);
   const book = useMemo(() => addressBook(me), [me]);
@@ -137,7 +138,7 @@ export function Checkout() {
       const iso = new Date().toISOString(), p = payload();
       order = {
         id: 'EE-' + nextNum, date: iso, email: p.email, name: p.name, first: p.first, phone: p.phone, address: p.address,
-        items: cart.map((l) => ({ name: l.name, sub: l.sub, qty: l.qty, unit: l.unit, tint: l.tint, pid: l.pid, cost: l.box ? l.box.reduce((a, c) => a + (costs[String(c.pid)] ?? 0), 0) : costs[String(l.pid)] ?? 0, ...(l.sel ? { sel: l.sel } : {}), ...(l.note ? { note: l.note } : {}), ...(l.box ? { box: l.box.map((c) => ({ pid: c.pid, name: get<Product[]>('products', []).find((x) => x.id === c.pid)?.name ?? '' })) } : {}) })),
+        items: cart.map((l) => ({ name: l.name, sub: l.sub, qty: l.qty, unit: l.unit, tint: l.tint, pid: l.pid, cost: l.box ? l.box.reduce((a, c) => a + (costs[String(c.pid)] ?? 0), 0) : costs[String(l.pid)] ?? 0, ...(l.sel ? { sel: l.sel } : {}), ...(l.note ? { note: l.note } : {}), ...(l.box ? { box: l.box.map((c) => ({ pid: c.pid, name: get<Product[]>('products', []).find((x) => x.id === c.pid)?.name ?? '', sel: c.sel })) } : {}) })),
         sub: T.sub, disc: T.disc, code: disc, ship: T.ship, shipM, wrap: T.wrap, total: T.total, status: 'Processing',
         pay: PAY_INFO[pay].title, payMethod: pay, payBank: pay === 'bank' ? bank?.bank ?? null : null, payStatus: 'Pending', note: p.note, sellerNote: p.sellerNote, userId: user ? user.id : null, log: [{ s: 'Placed', d: iso }],
       };
@@ -333,10 +334,11 @@ export function Checkout() {
               <div className="h3">{t('Order Summary')}</div>
               {cart.map((l) => (
                 <div key={l.key} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <div style={{ width: 48, height: 48, borderRadius: 8, background: soft(l.tint), ...(l.img ? { backgroundImage: 'url(' + l.img + ')', backgroundSize: 'cover', backgroundPosition: 'center' } : {}), flex: 'none' }} />
+                  <div style={{ width: 48, height: 48, borderRadius: 8, background: soft(l.tint), ...((l.img || boxPhoto(l, catalog)) ? { backgroundImage: 'url(' + (l.img || boxPhoto(l, catalog)) + ')', backgroundSize: 'cover', backgroundPosition: 'center' } : {}), flex: 'none', alignSelf: 'flex-start' }} />
                   <div style={{ flex: 1, minWidth: 0, fontSize: 14 }}>
                     <div style={{ fontWeight: 500 }}>{l.name}</div>
-                    <div className="muted">{lineText(l)}{' '}{t('· Qty')}{' '}{l.qty}</div>
+                    <div className="muted" style={{ fontSize: 13 }}><LineDetail line={l} compact /></div>
+                    <div className="muted">{t('Qty')}{' '}{l.qty}</div>
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{money(l.unit * l.qty)}</div>
                 </div>

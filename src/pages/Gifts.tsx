@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useApp } from '../AppContext';
 import { Configurator } from '../components/Configurator';
 import { Stepper } from '../components/ui';
-import { blendValid, defaultSelection, describe, inStock, normalize, selectionTint, unitPrice, type Selection } from '../commerce';
+import { blendValid, defaultSelection, describe, inStock, normalize, selectionTint, soft, unitPrice, type Selection } from '../commerce';
 import { money } from '../store';
 import { useT } from '../i18n';
 
@@ -57,6 +57,7 @@ export function Gifts() {
       key, pid: 0, name: 'Gift Box (' + rows.length + ' candles)',
       sub: rows.map((r) => r.p!.name + ' [' + describe(r.p!, r.sel, colors) + ']').join('; '),
       unit: total, tint: selectionTint(rows[0].sel, colors), qty: 1,
+      ...(rows.find((r) => r.p?.images?.[0]) ? { img: rows.find((r) => r.p?.images?.[0])!.p!.images![0] } : {}),
       box: rows.map((r) => ({ pid: r.p!.id, sel: { opts: r.sel.opts, color: r.sel.color, blend: r.sel.blend, ...(r.sel.sticker?.trim() ? { sticker: r.sel.sticker.trim() } : {}) } })),
       ...(box ? { boxId: box.id } : {}),
       ...(wantNote && note.trim() ? { note: note.trim() } : {}),
@@ -89,7 +90,13 @@ export function Gifts() {
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--brown)' }}>{t('Candle')}{' '}{i + 1}</div>
               <div style={{ fontSize: 14, fontWeight: 600 }}>{money(r.unit)}</div>
             </div>
-            <div className="ph ph-art gift-slot-art" style={{ backgroundColor: selectionTint(r.sel, colors), aspectRatio: '3/2', borderRadius: 14 }}>{r.p?.name}</div>
+            {r.p?.images?.[0] ? (
+              <div className="gift-slot-art has-img" style={{ backgroundColor: soft(selectionTint(r.sel, colors)) }}>
+                <img src={r.p.images[0]} alt={r.p.name} loading="lazy" />
+              </div>
+            ) : (
+              <div className="ph ph-art gift-slot-art" style={{ backgroundColor: selectionTint(r.sel, colors), aspectRatio: '3/2', borderRadius: 14 }}>{r.p?.name}</div>
+            )}
             <select
               aria-label={'Candle ' + (i + 1)}
               value={r.s.pid}

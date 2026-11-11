@@ -304,7 +304,7 @@ begin
   end if;
 
   for it in select * from jsonb_array_elements(o -> 'items') loop
-    qty := least(10, greatest(1, coalesce((it ->> 'qty')::int, 1)));
+    qty := least(9999, greatest(1, coalesce((it ->> 'qty')::int, 1)));  -- safety ceiling only; stock is checked below
     is_gc := false;
     if it ->> 'kind' = 'giftcard' then
       -- a gift card: a value the recipient spends later; no stock, no delivery
